@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../widgets/mobile_layout.dart';
 import '../core/services/booking_service.dart';
 import '../core/models/booking.dart';
+import '../core/utils/date_formatter.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key});
@@ -16,16 +17,68 @@ class _BookingScreenState extends State<BookingScreen> {
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
   final _promoCodeController = TextEditingController();
+  final _areaController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   
   String _paymentMethod = 'kaspi';
   bool _promoApplied = false;
   bool _saving = false;
+  int _area = 0; // Площадь в м²
+  
+  // Константы для расчета цены
+  static const int minPrice = 20000; // Минимальная цена в тенге
+  static const int pricePerSquareMeter = 500; // Цена за м² после 50 м²
+  static const int thresholdArea = 50; // Порог площади в м²
+
+  @override
+  void initState() {
+    super.initState();
+    // Инициализируем площадь из URL, если передана
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final state = GoRouterState.of(context);
+        final uri = state.uri;
+        final tariffId = uri.queryParameters['tariff'] ?? 
+                         uri.queryParameters['tariffId'] ?? 
+                         'default-tariff';
+        final areaStr = uri.queryParameters['area'] ?? '';
+        
+        if (areaStr.isNotEmpty) {
+          final areaFromUrl = int.tryParse(areaStr);
+          if (areaFromUrl != null && areaFromUrl > 0) {
+            setState(() {
+              _area = areaFromUrl;
+              // Заполняем поле для всех тарифов, кроме мебели
+              if (tariffId != 'furniture') {
+                _areaController.text = areaFromUrl.toString();
+              }
+            });
+          } else if (tariffId != 'furniture') {
+            _areaController.text = _area.toString();
+          }
+        } else if (tariffId != 'furniture') {
+          _areaController.text = _area.toString();
+        }
+      }
+    });
+    
+    // Слушаем изменения в поле площади
+    _areaController.addListener(() {
+      final areaValue = int.tryParse(_areaController.text);
+      if (areaValue != null && areaValue > 0) {
+        setState(() {
+          _area = areaValue;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
     _addressController.dispose();
     _phoneController.dispose();
     _promoCodeController.dispose();
+    _areaController.dispose();
     super.dispose();
   }
 
@@ -45,20 +98,79 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<void> _handleConfirm() async {
+    if (_saving) return; // Предотвращаем повторные запросы
+    
     if (_addressController.text.trim().isEmpty) {
+      if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Укажите адрес')),
       );
+      }
       return;
     }
 
     if (_phoneController.text.trim().isEmpty) {
+      if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Укажите телефон')),
       );
+      }
       return;
     }
 
+    // Проверяем, что площадь указана (только для тарифов, где нужна площадь)
+    final state = GoRouterState.of(context);
+    final uri = state.uri;
+    final tariffId = uri.queryParameters['tariff'] ?? 
+                     uri.queryParameters['tariffId'] ?? 
+                     'default-tariff';
+    
+    // Проверяем площадь для всех тарифов, кроме мебели
+    if (tariffId != 'furniture') {
+      // Валидируем форму
+      if (!_formKey.currentState!.validate()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Пожалуйста, укажите корректную площадь'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Проверяем, что площадь введена
+      if (_areaController.text.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Пожалуйста, укажите площадь квартиры или дома'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      
+      final areaValue = int.tryParse(_areaController.text);
+      if (areaValue == null || areaValue < 1) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Минимальное значение площади: 1 м²'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      setState(() {
+        _area = areaValue;
+      });
+    }
+
+    if (!mounted) return;
     setState(() => _saving = true);
 
     try {
@@ -71,25 +183,35 @@ class _BookingScreenState extends State<BookingScreen> {
       final tariffId = uri.queryParameters['tariff'] ?? 
                        uri.queryParameters['tariffId'] ?? 
                        'default-tariff';
-      final areaStr = uri.queryParameters['area'] ?? '';
 
       if (dateStr.isEmpty || time.isEmpty) {
         throw Exception('Дата и время не указаны');
       }
 
       // Parse date
-      final date = DateTime.parse(dateStr);
+      DateTime date;
+      try {
+        date = DateTime.parse(dateStr);
+      } catch (e) {
+        throw Exception('Некорректная дата');
+      }
       
       // Create SelectedDate
       final selectedDate = SelectedDate(date: date, time: time);
       
-      // Parse area if provided
+      // Используем площадь из поля ввода
       int? area;
-      if (areaStr.isNotEmpty) {
-        area = int.tryParse(areaStr);
+      if (tariffId != 'furniture') {
+        area = _area;
       }
 
-      // Create booking
+      // Calculate final price (используем новую логику расчета)
+      final basePrice = _calculateTotalPrice(tariffId, _area.toString());
+      final finalPrice = _promoApplied 
+          ? ((basePrice * 0.9).round() < minPrice ? minPrice : (basePrice * 0.9).round())
+          : basePrice;
+
+      // Create booking with timeout
       await BookingService.createOrder(
         tariffId: tariffId,
         tariffName: tariffName,
@@ -98,26 +220,131 @@ class _BookingScreenState extends State<BookingScreen> {
         phone: _phoneController.text.trim(),
         area: area,
         promoCode: _promoApplied ? _promoCodeController.text.trim().toUpperCase() : null,
+        paymentMethod: _paymentMethod,
+        totalPrice: finalPrice,
       );
 
-      if (mounted) {
-        setState(() => _saving = false);
-        context.push('/confirmation');
-      }
+    if (mounted) {
+      setState(() => _saving = false);
+      context.push('/confirmation');
+    }
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
+        
+        String errorMessage = e.toString();
+        final errorLower = errorMessage.toLowerCase();
+        
+        // Обработка специфичных ошибок
+        if (errorLower.contains('превышено время ожидания') ||
+            errorLower.contains('timeout') ||
+            errorLower.contains('timeoutexception')) {
+          errorMessage = 'Превышено время ожидания. Проверьте интернет-соединение и попробуйте снова';
+        } else if (errorLower.contains('ошибка сети') ||
+            errorLower.contains('network') ||
+            errorLower.contains('connection') ||
+            errorLower.contains('socketexception') ||
+            errorLower.contains('failed host lookup')) {
+          errorMessage = 'Ошибка сети. Проверьте интернет-соединение и попробуйте снова';
+        } else if (errorLower.contains('not authenticated') ||
+            errorLower.contains('unauthorized') ||
+            errorLower.contains('сессия истекла')) {
+          errorMessage = 'Сессия истекла. Пожалуйста, войдите в аккаунт снова';
+        } else if (errorLower.contains('api url не настроен') ||
+            errorLower.contains('api url') ||
+            errorLower.contains('конфигурация')) {
+          errorMessage = 'Ошибка конфигурации. Обратитесь в поддержку';
+        } else if (errorLower.contains('ошибка сервера') ||
+            errorLower.contains('500') ||
+            errorLower.contains('502') ||
+            errorLower.contains('503')) {
+          errorMessage = 'Ошибка сервера. Попробуйте позже или обратитесь в поддержку';
+        } else if (errorLower.contains('400') ||
+            errorLower.contains('404') ||
+            errorLower.contains('некорректный запрос')) {
+          errorMessage = 'Некорректные данные. Проверьте введенную информацию и попробуйте снова';
+        } else if (errorLower.contains('пустой ответ') ||
+            errorLower.contains('empty response')) {
+          errorMessage = 'Сервер не ответил. Проверьте интернет-соединение и попробуйте снова';
+        } else {
+          // Убираем технические детали из сообщения для пользователя
+          errorMessage = errorMessage
+              .replaceAll('Exception: ', '')
+              .replaceAll('TimeoutException: ', '')
+              .replaceAll('SocketException: ', '')
+              .trim();
+          
+          // Если сообщение слишком техническое, показываем общее
+          if (errorMessage.contains('FormatException') ||
+              errorMessage.contains('TypeError') ||
+              errorMessage.length > 100) {
+            errorMessage = 'Ошибка при создании заказа. Попробуйте снова или обратитесь в поддержку';
+          }
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              e.toString().replaceAll('Exception: ', ''),
-            ),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
           ),
         );
       }
     }
+  }
+
+  String _getFrequencyLabel(String frequency) {
+    const frequencyMap = {
+      'daily': 'Ежедневно',
+      'weekly': 'Еженедельно',
+      'biweekly': '2 раза в неделю',
+      'monthly': 'Раз в месяц',
+    };
+    return frequencyMap[frequency] ?? frequency;
+  }
+
+  /// Расчет цены согласно требованиям:
+  /// - Если площадь ≤ 50 м² → цена всегда 20,000 ₸
+  /// - Если площадь > 50 м² → цена = 20,000 + (площадь - 50) * pricePerSquareMeter
+  int _calculatePrice(int area) {
+    if (area <= thresholdArea) {
+      return minPrice;
+    }
+    
+    // Цена = минимум + (площадь - порог) * цена за м²
+    return minPrice + (area - thresholdArea) * pricePerSquareMeter;
+  }
+
+  int _calculateTotalPrice(String tariffId, String areaStr) {
+    // Для мебели фиксированная цена 5000
+    if (tariffId == 'furniture') {
+      return 5000;
+    }
+    
+    // Для корпоративного тарифа используем цену из URL
+    if (tariffId == 'corporate') {
+      final state = GoRouterState.of(context);
+      final uri = state.uri;
+      final totalFromUrl = int.tryParse(uri.queryParameters['total'] ?? '0') ?? 0;
+      if (totalFromUrl > 0) {
+        return totalFromUrl;
+      }
+    }
+    
+    // Пересчитываем на основе площади
+    final area = int.tryParse(areaStr) ?? _area;
+    
+    if (area <= 0) {
+      return minPrice; // Возвращаем минимум если площадь не указана
+    }
+    
+    // Используем новую логику расчета
+    return _calculatePrice(area);
   }
 
   @override
@@ -127,13 +354,24 @@ class _BookingScreenState extends State<BookingScreen> {
     final date = uri.queryParameters['date'] ?? '';
     final time = uri.queryParameters['time'] ?? '';
     final tariffName = uri.queryParameters['name'] ?? 'Услуга';
-    final total = int.tryParse(uri.queryParameters['total'] ?? '0') ?? 0;
-    final area = uri.queryParameters['area'] ?? '';
+    final tariffId = uri.queryParameters['tariff'] ?? 
+                     uri.queryParameters['tariffId'] ?? 
+                     'default-tariff';
 
-    int finalTotal = total;
+    // Пересчитываем цену на основе текущей площади
+    final baseTotal = _area > 0 
+        ? _calculateTotalPrice(tariffId, _area.toString())
+        : minPrice;
+    
+    int finalTotal = baseTotal;
     if (_promoApplied) {
-      finalTotal = (total * 0.9).toInt();
+      final discountedPrice = (baseTotal * 0.9).round();
+      finalTotal = discountedPrice < minPrice ? minPrice : discountedPrice;
     }
+    
+    // Проверяем, можно ли оформить заказ (площадь должна быть указана для всех тарифов, кроме мебели)
+    final canSubmit = tariffId == 'furniture' || 
+                      (_area > 0 && _areaController.text.trim().isNotEmpty && _formKey.currentState?.validate() == true);
 
     return MobileLayout(
       child: SingleChildScrollView(
@@ -197,16 +435,41 @@ class _BookingScreenState extends State<BookingScreen> {
                         label: 'Услуга',
                         value: tariffName,
                       ),
-                      if (area.isNotEmpty)
+                      // Показываем параметры корпоративного тарифа
+                      if (tariffId == 'corporate') ...[
+                        if (uri.queryParameters['objects'] != null)
+                          _OrderDetailRow(
+                            label: 'Количество объектов',
+                            value: uri.queryParameters['objects']!,
+                          ),
+                        if (uri.queryParameters['frequency'] != null)
+                          _OrderDetailRow(
+                            label: 'Частота уборок',
+                            value: _getFrequencyLabel(uri.queryParameters['frequency']!),
+                          ),
+                        if (uri.queryParameters['cleaners'] != null)
+                          _OrderDetailRow(
+                            label: 'Клинеров на объект',
+                            value: uri.queryParameters['cleaners']!,
+                          ),
+                      ],
+                      if (tariffId != 'furniture')
                         _OrderDetailRow(
                           label: 'Площадь',
-                          value: '$area м²',
+                          value: _area > 0 ? '$_area м²' : 'Не указана',
                         ),
                       if (date.isNotEmpty)
-                        _OrderDetailRow(
-                          label: 'Дата',
-                          value: DateFormat('d MMMM yyyy', 'ru')
-                              .format(DateTime.parse(date)),
+                        FutureBuilder<String>(
+                          future: DateFormatter.formatDateLong(DateTime.parse(date)),
+                          builder: (context, snapshot) {
+                            final dateText = snapshot.hasData 
+                                ? snapshot.data! 
+                                : DateFormatter.formatDateLongSync(DateTime.parse(date));
+                            return _OrderDetailRow(
+                              label: 'Дата',
+                              value: dateText,
+                            );
+                          },
                         ),
                       if (time.isNotEmpty)
                         _OrderDetailRow(
@@ -216,15 +479,204 @@ class _BookingScreenState extends State<BookingScreen> {
                       const Divider(),
                       _OrderDetailRow(
                         label: 'Стоимость',
-                        value: '${total.toStringAsFixed(0)} ₸',
+                        value: '${(_area > 0 ? _calculatePrice(_area) : minPrice).toStringAsFixed(0)} ₸',
                       ),
                       if (_promoApplied)
                         _OrderDetailRow(
                           label: 'Скидка (WELCOME)',
-                          value: '-${(total * 0.1).toInt()} ₸',
+                          value: '-${(baseTotal * 0.1).round()} ₸',
                           valueColor: Colors.green,
                         ),
                     ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ПЛОЩАДЬ - ОБЯЗАТЕЛЬНОЕ ПОЛЕ ДЛЯ ВВОДА
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                elevation: 2,
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.square_foot,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Площадь квартиры или дома',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                            ),
+                            if (tariffId != 'furniture') ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'ОБЯЗАТЕЛЬНО',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          tariffId == 'furniture'
+                              ? 'Укажите площадь (необязательно)'
+                              : 'Укажите площадь для расчета стоимости\nМинимальная стоимость: 20,000 ₸',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.grey[700],
+                              ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _areaController,
+                          autofocus: _area == 0 && tariffId != 'furniture',
+                          decoration: InputDecoration(
+                            labelText: 'Площадь (м²)',
+                            hintText: 'Площадь, м²',
+                            prefixIcon: const Icon(Icons.square_foot),
+                            suffixText: 'м²',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 2,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                                width: 1.5,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 2,
+                              ),
+                            ),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            // Разрешаем только цифры
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          validator: (value) {
+                            // Для тарифа мебели площадь необязательна
+                            if (tariffId == 'furniture') {
+                              return null;
+                            }
+                            if (value == null || value.isEmpty) {
+                              return 'Пожалуйста, укажите площадь';
+                            }
+                            final areaValue = int.tryParse(value);
+                            if (areaValue == null || areaValue < 1) {
+                              return 'Минимальное значение: 1 м²';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) {
+                            final areaValue = int.tryParse(value);
+                            if (areaValue != null && areaValue > 0) {
+                              setState(() {
+                                _area = areaValue;
+                              });
+                              // Валидируем форму при изменении
+                              _formKey.currentState?.validate();
+                            } else if (value.isEmpty) {
+                              setState(() {
+                                _area = 0;
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        if (_area > 0 && tariffId != 'furniture')
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Стоимость:',
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                    ),
+                                    Text(
+                                      '${_calculatePrice(_area)} ₸',
+                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: Theme.of(context).colorScheme.primary,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                if (_area <= thresholdArea)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      'Применена минимальная стоимость',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: Colors.orange,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                    ),
+                                  ),
+                                if (_area > thresholdArea)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      '$minPrice ₸ + (${_area - thresholdArea} м² × $pricePerSquareMeter ₸/м²)',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: Colors.grey[600],
+                                            fontSize: 11,
+                                          ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -367,7 +819,11 @@ class _BookingScreenState extends State<BookingScreen> {
                               onTap: () => setState(() => _paymentMethod = 'apple'),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
                           Expanded(
                             child: _PaymentMethodCard(
                               icon: Icons.credit_card,
@@ -375,6 +831,16 @@ class _BookingScreenState extends State<BookingScreen> {
                               subtitle: 'Visa/MC',
                               isSelected: _paymentMethod == 'card',
                               onTap: () => setState(() => _paymentMethod = 'card'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _PaymentMethodCard(
+                              icon: Icons.money,
+                              label: 'Наличные',
+                              subtitle: 'При получении',
+                              isSelected: _paymentMethod == 'cash',
+                              onTap: () => setState(() => _paymentMethod = 'cash'),
                             ),
                           ),
                         ],
@@ -419,19 +885,24 @@ class _BookingScreenState extends State<BookingScreen> {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
-                      onPressed: _saving ? null : _handleConfirm,
+                      onPressed: (_saving || !mounted || !canSubmit) ? null : _handleConfirm,
+                      style: ElevatedButton.styleFrom(
+                        disabledBackgroundColor: Colors.grey,
+                      ),
                       child: _saving
                           ? const SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
-                          : const Text(
-                              'Подтвердить и оплатить',
-                              style: TextStyle(
+                          : Text(
+                              _paymentMethod == 'cash' 
+                                  ? 'Подтвердить заказ'
+                                  : 'Подтвердить и оплатить',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),

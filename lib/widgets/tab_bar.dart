@@ -9,16 +9,28 @@ class CustomTabBar extends StatelessWidget {
     final currentPath = GoRouterState.of(context).uri.path;
 
     return Container(
+      height: 64, // Фиксированная высота
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         border: Border(
           top: BorderSide(color: Colors.grey.shade200),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 4,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
+        top: false, // Отключаем SafeArea сверху, чтобы высота была фиксированной
+        child: Container(
+          height: 64, // Дополнительная фиксация высоты
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
             _TabItem(
               icon: Icons.home,
               label: 'Главная',
@@ -49,7 +61,8 @@ class CustomTabBar extends StatelessWidget {
               path: '/profile',
               isActive: currentPath == '/profile',
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -74,16 +87,19 @@ class _TabItem extends StatelessWidget {
     return Expanded(
       child: InkWell(
         onTap: () => context.go(path),
+        splashColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+        highlightColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
                 color: isActive
                     ? Theme.of(context).colorScheme.primary
-                    : Colors.grey,
+                    : Colors.grey[600],
                 size: 24,
               ),
               const SizedBox(height: 4),
@@ -94,7 +110,7 @@ class _TabItem extends StatelessWidget {
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                   color: isActive
                       ? Theme.of(context).colorScheme.primary
-                      : Colors.grey,
+                      : Colors.grey[600],
                 ),
               ),
             ],

@@ -10,9 +10,11 @@ class MobileLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
+        bottom: false, // Отключаем SafeArea снизу, так как bottomNavigationBar сам использует SafeArea
         child: child,
       ),
       bottomNavigationBar: const CustomTabBar(),
+      resizeToAvoidBottomInset: false, // Предотвращаем изменение размера при появлении клавиатуры
     );
   }
 }

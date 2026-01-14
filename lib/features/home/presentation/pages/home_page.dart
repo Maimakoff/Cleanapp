@@ -4,6 +4,7 @@ import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/features/home/presentation/widgets/news_carousel.dart';
 import 'package:cleanapp/features/home/presentation/widgets/quick_services.dart';
 import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
+import 'package:cleanapp/widgets/app_logo.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -32,21 +33,7 @@ class HomePage extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Cleanapp',
-                        style: Theme.of(context).textTheme.displaySmall,
-                      ),
-                      Text(
-                        'Чистота в один клик',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                      ),
-                    ],
-                  ),
+                  const AppLogo(size: 48),
                   if (user == null)
                     OutlinedButton.icon(
                       onPressed: () => context.go('/auth'),

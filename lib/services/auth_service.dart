@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'supabase_service.dart';
+import 'package:cleanapp/core/services/supabase_service.dart';
 
 class AuthService {
   static User? get currentUser => SupabaseService.currentUser;
@@ -15,7 +15,7 @@ class AuthService {
     return await SupabaseService.signUp(
       email: email,
       password: password,
-      metadata: {
+      data: {
         if (name != null) 'name': name,
         if (phone != null) 'phone': phone,
         if (referralCode != null) 'referral_code': referralCode.toUpperCase(),
@@ -38,10 +38,21 @@ class AuthService {
   }
 
   static Future<void> resetPassword(String email) async {
+    try {
     await SupabaseService.client.auth.resetPasswordForEmail(
       email,
       redirectTo: 'cleanapp://reset-password',
     );
+    } catch (e) {
+      if (e.toString().contains('Supabase') || 
+          e.toString().contains('not initialized') ||
+          e.toString().contains('_isInitialized')) {
+        throw Exception(
+          'Supabase не настроен. Создайте файл .env с SUPABASE_URL и SUPABASE_ANON_KEY'
+        );
+      }
+      rethrow;
+    }
   }
 
   static Stream<AuthState> get authStateChanges =>

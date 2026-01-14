@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../widgets/mobile_layout.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/app_logo.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,16 +21,19 @@ class _HomeScreenState extends State<HomeScreen> {
       'title': 'Скидка 10% по пятницам!',
       'description': 'Закажите уборку на пятницу и получите скидку',
       'color': Colors.green,
+      'image': 'assets/promo/banner_friday.png',
     },
     {
       'title': 'Экспресс-уборка за 2 часа',
       'description': 'Быстрая и качественная уборка в любое время',
-      'color': Colors.blue,
+      'color': Colors.green,
+      'image': 'assets/promo/banner_express.png',
     },
     {
       'title': 'Приведи друга — получи скидку!',
       'description': 'Вы и ваш друг получите бонусы до 15%',
       'color': Colors.orange,
+      'image': 'assets/promo/banner_friend.png',
     },
   ];
 
@@ -91,23 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Cleanapp',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                      Text(
-                        'Чистота в один клик',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey,
-                            ),
-                      ),
-                    ],
-                  ),
+                  const AppLogo(size: 48),
                   if (user == null)
                     OutlinedButton.icon(
                       onPressed: () => context.push('/auth'),
@@ -157,30 +145,80 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: item['color'].withValues(alpha: 0.3),
                             ),
                           ),
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          child: Stack(
+                            fit: StackFit.expand,
                             children: [
-                              Text(
-                                item['title'],
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: item['color'],
-                                    ),
+                              // Фоновое изображение
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.asset(
+                                  item['image'],
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    // Если изображение не найдено, показываем цветной фон
+                                    return Container(
+                                      color: item['color'].withValues(alpha: 0.1),
+                                    );
+                                  },
+                                ),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                item['description'],
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: Colors.grey.shade700,
+                              // Градиентный оверлей для лучшей читаемости текста
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.0),
+                                      Colors.black.withValues(alpha: 0.3),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              // Текст поверх изображения
+                              Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      item['title'],
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleLarge
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                            shadows: [
+                                              const Shadow(
+                                                offset: Offset(1, 1),
+                                                blurRadius: 3,
+                                                color: Colors.black54,
+                                              ),
+                                            ],
+                                          ),
                                     ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      item['description'],
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: Colors.white.withValues(alpha: 0.95),
+                                            shadows: [
+                                              const Shadow(
+                                                offset: Offset(1, 1),
+                                                blurRadius: 2,
+                                                color: Colors.black54,
+                                              ),
+                                            ],
+                                          ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/app_logo.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -109,23 +110,19 @@ class _AuthScreenState extends State<AuthScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'CleanApp',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                        textAlign: TextAlign.center,
+                      // Логотип
+                      const Center(
+                        child: AppLogo(size: 64, showText: true),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 24),
                       Text(
                         _isForgotPassword
                             ? 'Восстановление пароля'
                             : _isLogin
                                 ? 'Войдите в свой аккаунт'
                                 : 'Создайте новый аккаунт',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Colors.grey[700],
                             ),
                         textAlign: TextAlign.center,
                       ),

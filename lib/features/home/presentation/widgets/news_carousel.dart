@@ -18,19 +18,22 @@ class _NewsCarouselState extends State<NewsCarousel> {
       'id': 1,
       'title': 'Скидка 10% по пятницам!',
       'description': 'Закажите уборку на пятницу и получите скидку',
-      'gradient': [0xFFE8F5E9, 0xFFF1F8E9],
+      'gradient': [0xFFD1FAE5, 0xFFA7F3D0], // Зеленые градиенты
+      'image': 'assets/promo/banner_friday.png',
     },
     {
       'id': 2,
       'title': 'Экспресс-уборка за 2 часа',
       'description': 'Быстрая и качественная уборка в любое время',
-      'gradient': [0xFFE8F5E9, 0xFFF1F8E9],
+      'gradient': [0xFFD1FAE5, 0xFFA7F3D0], // Зеленые градиенты
+      'image': 'assets/promo/banner_express.png',
     },
     {
       'id': 3,
       'title': 'Приведи друга — получи скидку!',
       'description': 'Вы и ваш друг получите бонусы до 15%',
-      'gradient': [0xFFE8F5E9, 0xFFF1F8E9],
+      'gradient': [0xFFFEF3C7, 0xFFFDE68A], // Желто-зеленый для акции
+      'image': 'assets/promo/banner_friend.png',
     },
   ];
 
@@ -94,29 +97,76 @@ class _NewsCarouselState extends State<NewsCarousel> {
                     color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                   ),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        item['title'],
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Фоновое изображение
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.asset(
+                        item['image'],
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          // Если изображение не найдено, показываем градиент
+                          return Container();
+                        },
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item['description'],
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[700],
+                    ),
+                    // Градиентный оверлей для лучшей читаемости текста
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.0),
+                            Colors.black.withValues(alpha: 0.3),
+                          ],
                         ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
+                    ),
+                    // Текст поверх изображения
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            item['title'],
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  offset: Offset(1, 1),
+                                  blurRadius: 3,
+                                  color: Colors.black54,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            item['description'],
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withValues(alpha: 0.95),
+                              shadows: const [
+                                Shadow(
+                                  offset: Offset(1, 1),
+                                  blurRadius: 2,
+                                  color: Colors.black54,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
             },

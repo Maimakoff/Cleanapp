@@ -9,6 +9,8 @@ import '../screens/confirmation_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/search_screen.dart';
 import '../screens/not_found_screen.dart';
+import '../screens/corporate_tariff_screen.dart';
+import '../screens/orders_history_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -42,6 +44,10 @@ class AppRouter {
         },
       ),
       GoRoute(
+        path: '/corporate-tariff',
+        builder: (context, state) => const CorporateTariffScreen(),
+      ),
+      GoRoute(
         path: '/booking',
         builder: (context, state) => const BookingScreen(),
       ),
@@ -52,6 +58,10 @@ class AppRouter {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/orders-history',
+        builder: (context, state) => const OrdersHistoryScreen(),
       ),
       GoRoute(
         path: '/not-found',

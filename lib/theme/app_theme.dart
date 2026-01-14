@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color primaryColor = Color(0xFF3B82F6);
-  static const Color primaryDark = Color(0xFF2563EB);
+  // Зеленая палитра в соответствии с логотипом
+  static const Color primaryColor = Color(0xFF22C55E); // Насыщенный зеленый (Emerald 500)
+  static const Color primaryDark = Color(0xFF16A34A); // Темно-зеленый (Green 600)
   static const Color successColor = Color(0xFF10B981);
   static const Color warningColor = Color(0xFFF59E0B);
   static const Color errorColor = Color(0xFFEF4444);
-  static const Color accentColor = Color(0xFF8B5CF6);
+  static const Color accentColor = Color(0xFF4ADE80); // Светло-зеленый акцент
 
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.light(
+    colorScheme: const ColorScheme.light(
       primary: primaryColor,
       secondary: accentColor,
       error: errorColor,
@@ -67,11 +68,11 @@ class AppTheme {
 
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.dark(
+    colorScheme: const ColorScheme.dark(
       primary: primaryColor,
       secondary: accentColor,
       error: errorColor,
-      surface: const Color(0xFF1F2937),
+      surface: Color(0xFF1F2937),
       onPrimary: Colors.white,
       onSecondary: Colors.white,
       onError: Colors.white,

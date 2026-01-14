@@ -78,7 +78,7 @@ class ProfileScreen extends StatelessWidget {
                     icon: Icons.history,
                     title: 'Мои заказы',
                     onTap: () {
-                      // Navigate to orders
+                      context.push('/orders-history');
                     },
                   ),
                   _ProfileMenuItem(

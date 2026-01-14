@@ -14,6 +14,8 @@ class TariffDetailScreen extends StatefulWidget {
 
 class _TariffDetailScreenState extends State<TariffDetailScreen> {
   int _area = 50;
+  final TextEditingController _areaController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   Tariff? get tariff {
     try {
@@ -21,6 +23,26 @@ class _TariffDetailScreenState extends State<TariffDetailScreen> {
     } catch (e) {
       return null;
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _areaController.text = _area.toString();
+    _areaController.addListener(() {
+      final areaValue = int.tryParse(_areaController.text);
+      if (areaValue != null && areaValue > 0) {
+        setState(() {
+          _area = areaValue;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _areaController.dispose();
+    super.dispose();
   }
 
   int _calculatePrice() {
@@ -35,7 +57,17 @@ class _TariffDetailScreenState extends State<TariffDetailScreen> {
       tariff!.price.replaceAll(RegExp(r'[^\d]'), ''),
     ) ?? 400;
     
-    return pricePerSqm * _area;
+    // Минимальная цена 20,000 ₸
+    const int minPrice = 20000;
+    
+    // Если площадь меньше 50 м², возвращаем минимальную цену
+    if (_area < 50) {
+      return minPrice;
+    }
+    
+    // Иначе цена за квадратный метр, но не меньше минимума
+    final calculatedPrice = pricePerSqm * _area;
+    return calculatedPrice < minPrice ? minPrice : calculatedPrice;
   }
 
   @override
@@ -100,48 +132,76 @@ class _TariffDetailScreenState extends State<TariffDetailScreen> {
               ),
             ),
 
-            // Area Selector (for area-based tariffs)
+            // Area Input (for area-based tariffs)
             if (widget.tariffId != 'furniture')
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Площадь квартиры',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Slider(
-                                value: _area.toDouble(),
-                                min: 20,
-                                max: 200,
-                                divisions: 36,
-                                label: '$_area м²',
-                                onChanged: (value) {
-                                  setState(() {
-                                    _area = value.toInt();
-                                  });
-                                },
-                              ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Площадь квартиры или дома',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Укажите площадь для расчета стоимости\nМинимальная стоимость: 20,000 ₸',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey,
+                                ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _areaController,
+                            decoration: InputDecoration(
+                              labelText: 'Площадь (м²)',
+                              hintText: 'Введите площадь',
+                              prefixIcon: const Icon(Icons.square_foot),
+                              suffixText: 'м²',
+                              errorText: _areaController.text.isNotEmpty && 
+                                  (int.tryParse(_areaController.text) == null || 
+                                   int.tryParse(_areaController.text)! <= 0)
+                                  ? 'Введите корректное значение'
+                                  : null,
                             ),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Пожалуйста, укажите площадь';
+                              }
+                              final areaValue = int.tryParse(value);
+                              if (areaValue == null || areaValue <= 0) {
+                                return 'Введите корректное значение';
+                              }
+                              return null;
+                            },
+                            onChanged: (value) {
+                              final areaValue = int.tryParse(value);
+                              if (areaValue != null && areaValue > 0) {
+                                setState(() {
+                                  _area = areaValue;
+                                });
+                              } else if (value.isEmpty) {
+                                setState(() {
+                                  _area = 0;
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          if (_area > 0)
                             Container(
-                              width: 80,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: Theme.of(context)
                                     .colorScheme
@@ -149,19 +209,44 @@ class _TariffDetailScreenState extends State<TariffDetailScreen> {
                                     .withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                '$_area м²',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      Theme.of(context).colorScheme.primary,
-                                ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Стоимость:',
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  Text(
+                                    '${_calculatePrice().toStringAsFixed(0)} ₸',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                        ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ],
+                          if (_area > 0 && _area < 50)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Применена минимальная стоимость',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Colors.orange,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -256,6 +341,30 @@ class _TariffDetailScreenState extends State<TariffDetailScreen> {
                 height: 56,
                 child: ElevatedButton(
                   onPressed: () {
+                    // Валидация формы
+                    if (widget.tariffId != 'furniture') {
+                      if (!_formKey.currentState!.validate()) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Пожалуйста, укажите площадь квартиры или дома'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      final areaValue = int.tryParse(_areaController.text);
+                      if (areaValue == null || areaValue <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Пожалуйста, укажите корректную площадь'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                    }
+                    
                     context.push(
                       '/calendar?tariff=${widget.tariffId}&name=${Uri.encodeComponent(tariff!.name)}&total=$totalPrice&area=$_area',
                     );

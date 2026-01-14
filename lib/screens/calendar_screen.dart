@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import '../widgets/mobile_layout.dart';
-import '../models/booking.dart';
-import '../services/supabase_service.dart';
+import 'package:cleanapp/core/models/booking.dart';
+import 'package:cleanapp/core/services/supabase_service.dart';
+import '../core/utils/date_formatter.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -20,6 +20,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _currentSelectingDate;
   final List<SelectedDate> _selectedDates = [];
   List<Map<String, dynamic>> _bookings = [];
+  bool _isBookingMode = false; // Режим бронирования (после выбора тарифа)
+  String? _currentTariffId; // ID текущего тарифа
 
   final List<String> _timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -30,9 +32,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   void initState() {
     super.initState();
-    initializeDateFormatting('ru', null).then((_) {
-      _loadBookings();
+    // Проверяем, открыт ли календарь из выбора тарифа
+    // Используем addPostFrameCallback, так как context доступен только после первого build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final state = GoRouterState.of(context);
+        final uri = state.uri;
+        setState(() {
+          _isBookingMode = uri.queryParameters.containsKey('tariff');
+          _currentTariffId = uri.queryParameters['tariff'];
+        });
+      }
     });
+    
+    _loadBookings();
   }
 
   Future<void> _loadBookings() async {
@@ -52,22 +65,94 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return bookedCount >= _timeSlots.length;
   }
 
+  // Получить список заблокированных временных слотов для даты
+  List<String> _getBlockedTimeSlots(DateTime date) {
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    final blockedSlots = <String>{};
+    
+    // Находим все забронированные времена на эту дату
+    final bookedTimes = _bookings
+        .where((b) => b['date'] == dateStr)
+        .map((b) => b['time'] as String)
+        .toList();
+    
+    // Для каждого забронированного времени блокируем 2 часа до и после
+    for (final bookedTime in bookedTimes) {
+      final bookedHour = int.tryParse(bookedTime.split(':')[0]) ?? 0;
+      
+      // Блокируем 2 часа до и после (включая само время)
+      for (int i = -2; i <= 2; i++) {
+        final blockedHour = bookedHour + i;
+        if (blockedHour >= 9 && blockedHour <= 20) {
+          final blockedTime = '${blockedHour.toString().padLeft(2, '0')}:00';
+          blockedSlots.add(blockedTime);
+        }
+      }
+    }
+    
+    return blockedSlots.toList();
+  }
+
   bool _isTimeSlotAvailable(DateTime date, String time) {
     final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    
+    // Проверяем, забронировано ли это время напрямую
     final isBooked = _bookings.any(
       (b) => b['date'] == dateStr && b['time'] == time,
     );
+    
+    // Проверяем, заблокировано ли это время (2 часа до/после другого бронирования)
+    final blockedSlots = _getBlockedTimeSlots(date);
+    final isBlocked = blockedSlots.contains(time);
+    
+    // Проверяем, выбрано ли это время пользователем
     final isSelected = _selectedDates.any(
       (s) => DateFormat('yyyy-MM-dd').format(s.date) == dateStr && s.time == time,
     );
-    return !isBooked && !isSelected;
+    
+    return !isBooked && !isBlocked && !isSelected;
+  }
+
+  // Получить максимальное количество дат для тарифа
+  int? _getMaxDatesForTariff(String? tariffId) {
+    if (tariffId == null) return null; // Без ограничений для обычного календаря
+    
+    switch (tariffId) {
+      case 'start':
+        return 1;
+      case 'comfort':
+        return 4;
+      case 'premium':
+        return 8;
+      case 'lux':
+        return 12;
+      case 'after-renovation':
+      case 'furniture':
+        return 1;
+      default:
+        return null; // Без ограничений для других тарифов
+    }
   }
 
   bool _isDateAvailable(DateTime date) {
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
     final dateOnly = DateTime(date.year, date.month, date.day);
-    return dateOnly.isAfter(todayOnly) || dateOnly.isAtSameMomentAs(todayOnly);
+    
+    // Проверяем, что дата не в прошлом
+    if (dateOnly.isBefore(todayOnly)) {
+      return false;
+    }
+    
+    // Если это режим бронирования (после выбора тарифа), ограничиваем 1 месяц
+    if (_isBookingMode) {
+      final maxDate = DateTime(today.year, today.month + 1, today.day);
+      final maxDateOnly = DateTime(maxDate.year, maxDate.month, maxDate.day);
+      return dateOnly.isBefore(maxDateOnly) || dateOnly.isAtSameMomentAs(maxDateOnly);
+    }
+    
+    // Для обычного календаря (вкладка) - без ограничений по дате
+    return true;
   }
 
   void _handleDateSelect(DateTime selectedDay, DateTime focusedDay) {
@@ -82,12 +167,59 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void _handleTimeSelect(String time) {
     if (_currentSelectingDate == null) return;
     if (!_isTimeSlotAvailable(_currentSelectingDate!, time)) {
+      final blockedSlots = _getBlockedTimeSlots(_currentSelectingDate!);
+      final isBlocked = blockedSlots.contains(time);
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Это время уже занято')),
+        SnackBar(
+          content: Text(
+            isBlocked
+                ? 'Это время заблокировано (за 2 часа до/после другого бронирования)'
+                : 'Это время уже занято',
+          ),
+        ),
       );
       return;
     }
 
+    // Проверяем ограничение на количество дат для тарифа
+    final maxDates = _getMaxDatesForTariff(_currentTariffId);
+    
+    if (maxDates != null) {
+      // Для тарифов с лимитом 1 (start, after-renovation, furniture) заменяем предыдущую дату
+      if (maxDates == 1) {
+        setState(() {
+          _selectedDates.clear();
+          _selectedDates.add(SelectedDate(
+            date: _currentSelectingDate!,
+            time: time,
+          ));
+          _currentSelectingDate = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Разовая уборка: выбрана дата'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      
+      // Для остальных тарифов проверяем лимит
+      if (_selectedDates.length >= maxDates) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Для этого тарифа можно выбрать максимум $maxDates ${maxDates == 1 ? 'дату' : maxDates < 5 ? 'даты' : 'дат'}. Удалите одну из выбранных дат, чтобы добавить новую.',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+    }
+
+    // Добавляем новую дату
     setState(() {
       _selectedDates.add(SelectedDate(
         date: _currentSelectingDate!,
@@ -111,14 +243,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return;
     }
 
-    final uri = Uri(
+    // Получаем параметры из URL (если есть)
+    final state = GoRouterState.of(context);
+    final uri = state.uri;
+    
+    final queryParams = <String, String>{
+      'date': DateFormat('yyyy-MM-dd').format(_selectedDates[0].date),
+      'time': _selectedDates[0].time,
+    };
+    
+    // Передаем параметры тарифа, если они есть
+    if (uri.queryParameters.containsKey('tariff')) {
+      queryParams['tariff'] = uri.queryParameters['tariff']!;
+    }
+    if (uri.queryParameters.containsKey('name')) {
+      queryParams['name'] = uri.queryParameters['name']!;
+    }
+    if (uri.queryParameters.containsKey('total')) {
+      queryParams['total'] = uri.queryParameters['total']!;
+    }
+    if (uri.queryParameters.containsKey('area')) {
+      queryParams['area'] = uri.queryParameters['area']!;
+    }
+
+    final bookingUri = Uri(
       path: '/booking',
-      queryParameters: {
-        'date': DateFormat('yyyy-MM-dd').format(_selectedDates[0].date),
-        'time': _selectedDates[0].time,
-      },
+      queryParameters: queryParams,
     );
-    context.push(uri.toString());
+    context.push(bookingUri.toString());
   }
 
   @override
@@ -169,14 +321,61 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Выбранные даты:',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _getMaxDatesForTariff(_currentTariffId) == 1
+                                  ? 'Выбранная дата:' 
+                                  : 'Выбранные даты:',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
+                          ),
+                          if (_currentTariffId != null)
+                            Builder(
+                              builder: (context) {
+                                final maxDates = _getMaxDatesForTariff(_currentTariffId);
+                                if (maxDates == null) return const SizedBox.shrink();
+                                
+                                final remaining = maxDates - _selectedDates.length;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: remaining > 0
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.1)
+                                        : Colors.orange.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    remaining > 0
+                                        ? 'Осталось: $remaining ${remaining == 1 ? 'дата' : remaining < 5 ? 'даты' : 'дат'}'
+                                        : 'Лимит достигнут',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: remaining > 0
+                                              ? Theme.of(context).colorScheme.primary
+                                              : Colors.orange,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       Wrap(
@@ -188,7 +387,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             final selected = _selectedDates[index];
                             return Chip(
                               label: Text(
-                                '${DateFormat('d MMM').format(selected.date)} ${selected.time}',
+                                '${DateFormatter.formatDateShort(selected.date)} ${selected.time}',
                               ),
                               onDeleted: () => _removeSelectedDate(index),
                               backgroundColor: Theme.of(context)
@@ -217,7 +416,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     padding: const EdgeInsets.all(16),
                     child: TableCalendar(
                       firstDay: DateTime.now(),
-                      lastDay: DateTime.now().add(const Duration(days: 365)),
+                      lastDay: _isBookingMode
+                          ? DateTime(DateTime.now().year, DateTime.now().month + 1, DateTime.now().day)
+                          : DateTime.now().add(const Duration(days: 365)),
                       focusedDay: _focusedDay,
                       selectedDayPredicate: (day) {
                         return isSameDay(_selectedDay, day);
@@ -249,6 +450,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           shape: BoxShape.circle,
                         ),
                       ),
+                      enabledDayPredicate: (day) {
+                        return _isDateAvailable(day);
+                      },
                       headerStyle: const HeaderStyle(
                         formatButtonVisible: false,
                         titleCentered: true,
@@ -282,7 +486,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Выберите время на ${DateFormat('d MMMM', 'ru').format(_currentSelectingDate!)}',
+                    'Выберите время на ${DateFormatter.formatDateMonth(_currentSelectingDate!)}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),

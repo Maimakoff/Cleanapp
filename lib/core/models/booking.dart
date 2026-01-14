@@ -34,19 +34,40 @@ class Booking {
   });
 
   factory Booking.fromJson(Map<String, dynamic> json) {
+    // Обработка total_price (может быть int, double или String из DECIMAL)
+    int totalPrice;
+    if (json['total_price'] is int) {
+      totalPrice = json['total_price'] as int;
+    } else if (json['total_price'] is double) {
+      totalPrice = (json['total_price'] as double).round();
+    } else if (json['total_price'] is String) {
+      totalPrice = (double.tryParse(json['total_price'] as String) ?? 0.0).round();
+    } else {
+      totalPrice = 0;
+    }
+
+    // Обработка date (может быть String или DateTime)
+    String dateStr;
+    if (json['date'] is DateTime) {
+      final date = json['date'] as DateTime;
+      dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    } else {
+      dateStr = json['date'] as String;
+    }
+
     return Booking(
       id: json['id'] as String,
       userId: json['user_id'] as String,
       tariffId: json['tariff_id'] as String,
       tariffName: json['tariff_name'] as String,
-      date: json['date'] as String,
+      date: dateStr,
       time: json['time'] as String,
       address: json['address'] as String,
       phone: json['phone'] as String,
       area: json['area'] as int?,
-      totalPrice: json['total_price'] as int,
+      totalPrice: totalPrice,
       discountPercentage: json['discount_percentage'] as int?,
-      status: json['status'] as String,
+      status: json['status'] as String? ?? 'pending',
       additionalOptions: json['additional_options'] as Map<String, dynamic>?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Colors
-  static const Color primaryColor = Color(0xFF3B82F6);
-  static const Color primaryDark = Color(0xFF2563EB);
-  static const Color successColor = Color(0xFF10B981);
+  // Colors - Зеленая палитра в соответствии с логотипом
+  static const Color primaryColor = Color(0xFF22C55E); // Насыщенный зеленый (Emerald 500)
+  static const Color primaryDark = Color(0xFF16A34A); // Темно-зеленый (Green 600)
+  static const Color primaryLight = Color(0xFF4ADE80); // Светло-зеленый (Emerald 400)
+  static const Color successColor = Color(0xFF10B981); // Изумрудный для успешных действий
   static const Color warningColor = Color(0xFFF59E0B);
   static const Color errorColor = Color(0xFFEF4444);
   static const Color kaspiColor = Color(0xFFF14635);
@@ -15,8 +16,12 @@ class AppTheme {
       seedColor: primaryColor,
       brightness: Brightness.light,
       primary: primaryColor,
+      primaryContainer: primaryLight,
       secondary: successColor,
       error: errorColor,
+      surface: Colors.white,
+      onPrimary: Colors.white,
+      onSecondary: Colors.white,
     ),
     scaffoldBackgroundColor: const Color(0xFFFAFAFA),
     cardColor: Colors.white,
@@ -90,8 +95,12 @@ class AppTheme {
       seedColor: primaryColor,
       brightness: Brightness.dark,
       primary: primaryColor,
+      primaryContainer: primaryLight,
       secondary: successColor,
       error: errorColor,
+      surface: const Color(0xFF1A1A1A),
+      onPrimary: Colors.white,
+      onSecondary: Colors.white,
     ),
     scaffoldBackgroundColor: const Color(0xFF0F0F0F),
     cardColor: const Color(0xFF1A1A1A),

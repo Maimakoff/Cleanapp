@@ -34,11 +34,19 @@ class _AuthFormState extends State<AuthForm> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_isLoading) return; // Предотвращаем повторные запросы
+
     setState(() => _isLoading = true);
 
     try {
       if (_isForgotPassword) {
-        await SupabaseService.resetPassword(_emailController.text.trim());
+        await SupabaseService.resetPassword(_emailController.text.trim())
+            .timeout(
+              const Duration(seconds: 30),
+              onTimeout: () {
+                throw Exception('Превышено время ожидания. Проверьте интернет-соединение');
+              },
+            );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Письмо отправлено! Проверьте почту')),
@@ -46,12 +54,23 @@ class _AuthFormState extends State<AuthForm> {
           setState(() => _isForgotPassword = false);
         }
       } else if (_isLogin) {
-        await SupabaseService.signIn(
+        final response = await SupabaseService.signIn(
           email: _emailController.text.trim(),
           password: _passwordController.text,
+        ).timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            throw Exception('Превышено время ожидания. Проверьте интернет-соединение');
+          },
         );
+        
         if (mounted) {
+          // Проверяем, что сессия действительно создана
+          if (response.session != null) {
           context.go('/');
+          } else {
+            throw Exception('Не удалось войти. Проверьте данные для входа');
+          }
         }
       } else {
         final response = await SupabaseService.signUp(
@@ -62,6 +81,11 @@ class _AuthFormState extends State<AuthForm> {
             'phone': _phoneController.text.trim(),
             'referral_code': _referralController.text.trim().toUpperCase(),
           },
+        ).timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            throw Exception('Превышено время ожидания. Проверьте интернет-соединение и попробуйте снова');
+          },
         );
         
         if (mounted) {
@@ -69,13 +93,59 @@ class _AuthFormState extends State<AuthForm> {
           if (response.session == null && response.user != null) {
             // Email confirmation required
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Регистрация успешна! Проверьте почту для подтверждения email. '
-                  'После подтверждения вы сможете войти в аккаунт.',
+              SnackBar(
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Регистрация успешна! Проверьте почту для подтверждения email.',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () async {
+                        try {
+                          await SupabaseService.resendEmailConfirmation(
+                            _emailController.text.trim(),
+        );
+        if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Письмо отправлено повторно!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Ошибка: ${e.toString().replaceAll('Exception: ', '')}',
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Отправить письмо повторно'),
+                    ),
+                  ],
                 ),
-                duration: Duration(seconds: 5),
+                duration: const Duration(seconds: 10),
                 backgroundColor: Colors.orange,
+                action: SnackBarAction(
+                  label: 'OK',
+                  textColor: Colors.white,
+                  onPressed: () {},
+                ),
               ),
             );
             // Switch to login mode
@@ -84,7 +154,7 @@ class _AuthFormState extends State<AuthForm> {
             });
           } else if (response.session != null) {
             // User is automatically logged in (email confirmation disabled)
-            context.go('/');
+          context.go('/');
           } else {
             // Registration failed
             throw Exception('Не удалось зарегистрироваться');
@@ -94,23 +164,111 @@ class _AuthFormState extends State<AuthForm> {
     } catch (e) {
       if (mounted) {
         String errorMessage = e.toString();
+        final errorLower = errorMessage.toLowerCase();
         
+        // Handle timeout errors
+        if (errorLower.contains('превышено время ожидания') ||
+            errorLower.contains('timeout') ||
+            errorLower.contains('timeoutexception')) {
+          errorMessage = 'Превышено время ожидания. Проверьте интернет-соединение и попробуйте снова';
+        }
         // Handle specific Supabase errors
-        if (errorMessage.contains('User already registered')) {
-          errorMessage = 'Пользователь с таким email уже зарегистрирован';
-        } else if (errorMessage.contains('Invalid email')) {
-          errorMessage = 'Некорректный email адрес';
-        } else if (errorMessage.contains('Password')) {
-          errorMessage = 'Пароль должен быть не менее 6 символов';
-        } else if (errorMessage.contains('Email rate limit')) {
-          errorMessage = 'Слишком много запросов. Попробуйте позже';
+        else if (errorLower.contains('supabase не инициализирован') ||
+            errorLower.contains('supabase не настроен') ||
+            errorLower.contains('_isinitialized') ||
+            errorLower.contains('not initialized')) {
+          errorMessage = 'Supabase не настроен. Проверьте файл .env с SUPABASE_URL и SUPABASE_ANON_KEY';
+        }
+        // Обработка ошибок входа (login)
+        else if (_isLogin) {
+          // Неверные учетные данные (Supabase не различает неверный email и пароль для безопасности)
+          if (errorLower.contains('invalid login credentials') ||
+              errorLower.contains('invalid credentials') ||
+              errorLower.contains('invalid email or password')) {
+            errorMessage = 'Неверный email или пароль. Проверьте правильность данных или зарегистрируйтесь, если у вас еще нет аккаунта';
+          } 
+          // Email не подтвержден
+          else if (errorLower.contains('email not confirmed') ||
+              errorLower.contains('email not verified') ||
+              errorLower.contains('email не подтвержден')) {
+            errorMessage = 'Email не подтвержден. Проверьте почту и подтвердите email перед входом';
+          } 
+          // Слишком много попыток
+          else if (errorLower.contains('too many requests') ||
+              errorLower.contains('rate limit') ||
+              errorLower.contains('слишком много попыток')) {
+            errorMessage = 'Слишком много попыток входа. Подождите немного и попробуйте снова';
+          } 
+          // Пользователь уже зарегистрирован (при попытке входа)
+          else if (errorLower.contains('user already registered') ||
+              errorLower.contains('already registered') ||
+              errorLower.contains('email address is already')) {
+            errorMessage = 'Пользователь с таким email уже зарегистрирован. Войдите в систему';
+          } 
+          // Пользователь не найден (старая проверка, обычно не используется Supabase)
+          else if (errorLower.contains('email not found') ||
+              errorLower.contains('user not found') ||
+              errorLower.contains('пользователь не найден')) {
+            errorMessage = 'Пользователь с таким email не найден. Проверьте правильность email или зарегистрируйтесь';
+          } 
+          // Неверный пароль (старая проверка, обычно не используется Supabase)
+          else if (errorLower.contains('invalid password') ||
+              errorLower.contains('wrong password') ||
+              errorLower.contains('неверный пароль') ||
+              errorLower.contains('incorrect password')) {
+            errorMessage = 'Неверный пароль. Проверьте правильность пароля или воспользуйтесь восстановлением пароля';
+          } 
+          // Общая ошибка входа
+          else {
+            errorMessage = 'Не удалось войти. Проверьте правильность email и пароля';
+          }
+        }
+        // Обработка ошибок регистрации (signup)
+        else {
+          if (errorLower.contains('user already registered') ||
+              errorLower.contains('already registered') ||
+              errorLower.contains('email address is already') ||
+              errorLower.contains('user already exists')) {
+            errorMessage = 'Пользователь с таким email уже зарегистрирован. Войдите в систему или используйте другой email';
+          } else if (errorLower.contains('invalid email') ||
+              errorLower.contains('invalid email format')) {
+            errorMessage = 'Некорректный email адрес. Проверьте правильность ввода';
+          } else if (errorLower.contains('password') && 
+              (errorLower.contains('short') || errorLower.contains('weak') || errorLower.contains('too short'))) {
+            errorMessage = 'Пароль должен быть не менее 6 символов';
+          } else if (errorLower.contains('email rate limit') ||
+              errorLower.contains('rate limit') ||
+              errorLower.contains('too many requests')) {
+            errorMessage = 'Слишком много запросов. Попробуйте позже';
+          } else {
+            errorMessage = 'Не удалось зарегистрироваться. Проверьте введенные данные и попробуйте снова';
+          }
+        }
+        
+        // Общие ошибки сети
+        if (errorLower.contains('network') ||
+            errorLower.contains('connection') ||
+            errorLower.contains('socketexception') ||
+            errorLower.contains('failed host lookup')) {
+          errorMessage = 'Ошибка сети. Проверьте интернет-соединение и попробуйте снова';
         }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage.replaceAll('Exception: ', '')),
+            content: Text(
+              errorMessage
+                  .replaceAll('Exception: ', '')
+                  .replaceAll('TimeoutException: ', '')
+                  .replaceAll('AuthException: ', '')
+                  .trim(),
+            ),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
           ),
         );
       }
@@ -177,12 +335,23 @@ class _AuthFormState extends State<AuthForm> {
             ),
             keyboardType: TextInputType.emailAddress,
             validator: (value) {
+              // Используем более строгую валидацию email
               if (value == null || value.trim().isEmpty) {
                 return 'Введите email';
               }
-              if (!value.contains('@')) {
+              
+              final emailRegex = RegExp(
+                r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+              );
+              
+              if (!emailRegex.hasMatch(value.trim())) {
                 return 'Введите корректный email';
               }
+              
+              if (value.length > 255) {
+                return 'Email слишком длинный';
+              }
+              
               return null;
             },
           ),
@@ -221,12 +390,18 @@ class _AuthFormState extends State<AuthForm> {
             ),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: _isLoading ? null : _handleSubmit,
+            onPressed: (_isLoading || !mounted) ? null : _handleSubmit,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+            ),
             child: _isLoading
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
                   )
                 : Text(_isForgotPassword
                     ? 'Отправить ссылку'

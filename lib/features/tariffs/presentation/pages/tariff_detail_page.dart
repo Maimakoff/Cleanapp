@@ -12,9 +12,16 @@ class TariffDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Безопасная проверка существования тарифа
     final tariff = ServicesData.tariffs.firstWhere(
       (t) => t.id == tariffId,
-      orElse: () => ServicesData.tariffs.first,
+      orElse: () {
+        // Если тариф не найден, возвращаем первый доступный или показываем ошибку
+        if (ServicesData.tariffs.isEmpty) {
+          throw Exception('Тарифы не найдены');
+        }
+        return ServicesData.tariffs.first;
+      },
     );
 
     return Scaffold(
