@@ -1,8 +1,16 @@
 import 'package:cleanapp/core/models/booking.dart';
-import 'package:cleanapp/core/services/supabase_service.dart';
+import 'package:cleanapp/core/domain/repositories/booking_repository.dart';
+import 'package:cleanapp/core/data/repositories/booking_repository_impl.dart';
+import 'package:cleanapp/core/domain/entities/booking.dart' as domain;
 
+/// Service layer for booking operations.
+/// Uses BookingRepository interface to abstract data source.
+/// Maintains static API for backward compatibility.
 class BookingService {
-  // Create order directly in Supabase table
+  // Singleton instance of BookingRepository
+  static final BookingRepository _repository = BookingRepositoryImpl();
+
+  // Create order using BookingRepository
   static Future<Map<String, dynamic>> createOrder({
     required String tariffId,
     required String tariffName,
@@ -16,56 +24,49 @@ class BookingService {
     String? paymentMethod,
     int? totalPrice,
   }) async {
-    final user = SupabaseService.currentUser;
-    if (user == null) {
-      throw Exception('Not authenticated');
-    }
-
     try {
-      // Вычисляем процент скидки
-      int? discountPercentage;
-      if (promoCode != null && promoCode.isNotEmpty) {
-        // Проверяем промокод (можно расширить логику)
-        if (promoCode.toUpperCase() == 'WELCOME') {
-          discountPercentage = 10;
-        }
-      }
+      // Convert data model SelectedDate to domain SelectedDate
+      final domainDates = dates.map((d) => domain.SelectedDate(
+        date: d.date,
+        time: d.time,
+      )).toList();
 
-      // Создаем записи для каждой даты
+      // Create bookings for each date using repository
       final List<Map<String, dynamic>> createdBookings = [];
       
-      for (final selectedDate in dates) {
-        final bookingData = {
-          'user_id': user.id,
-          'tariff_id': tariffId,
-          'tariff_name': tariffName,
-          'date': selectedDate.date.toIso8601String().split('T')[0], // Формат YYYY-MM-DD
-          'time': selectedDate.time,
-          'address': address,
-          'phone': phone,
-          'area': area,
-          'total_price': totalPrice?.toDouble() ?? 0.0,
-          'discount_percentage': discountPercentage,
-          'status': 'pending',
-          'additional_options': additionalOptions != null && additionalOptions.isNotEmpty
-              ? additionalOptions
-              : null,
-          'payment_method': paymentMethod,
-        };
+      for (final selectedDate in domainDates) {
+        final booking = await _repository.createBooking(
+          tariffId: tariffId,
+          tariffName: tariffName,
+          dates: [selectedDate], // Create one booking per date
+          address: address,
+          phone: phone,
+          area: area,
+          additionalOptions: additionalOptions,
+          promoCode: promoCode,
+          useReferralBonus: useReferralBonus,
+          paymentMethod: paymentMethod,
+          totalPrice: totalPrice,
+        );
 
-        final response = await SupabaseService.client
-            .from('bookings')
-            .insert(bookingData)
-            .select()
-            .single()
-            .timeout(
-              const Duration(seconds: 30),
-              onTimeout: () {
-                throw Exception('Превышено время ожидания. Проверьте интернет-соединение');
-              },
-            );
-
-        createdBookings.add(Map<String, dynamic>.from(response));
+        // Convert domain entity back to data model format for response
+        createdBookings.add({
+          'id': booking.id,
+          'user_id': booking.userId,
+          'tariff_id': booking.tariffId,
+          'tariff_name': booking.tariffName,
+          'date': booking.date,
+          'time': booking.time,
+          'address': booking.address,
+          'phone': booking.phone,
+          'area': booking.area,
+          'total_price': booking.totalPrice,
+          'discount_percentage': booking.discountPercentage,
+          'status': booking.status,
+          'additional_options': booking.additionalOptions,
+          'created_at': booking.createdAt.toIso8601String(),
+          'updated_at': booking.updatedAt.toIso8601String(),
+        });
       }
 
       return {

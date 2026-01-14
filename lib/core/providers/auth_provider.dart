@@ -89,4 +89,3 @@ class AuthProvider with ChangeNotifier {
     await AuthService.resetPassword(email);
   }
 }
-

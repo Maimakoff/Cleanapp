@@ -4,7 +4,7 @@ import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/features/home/presentation/widgets/news_carousel.dart';
 import 'package:cleanapp/features/home/presentation/widgets/quick_services.dart';
 import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
-import 'package:cleanapp/widgets/app_logo.dart';
+import 'package:cleanapp/core/widgets/app_logo.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});

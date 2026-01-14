@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'providers/auth_provider.dart';
+import 'core/providers/auth_provider.dart';
 import 'core/routing/app_router.dart';
-import 'theme/app_theme.dart';
+import 'core/theme/app_theme.dart';
 import 'core/utils/date_formatter.dart';
 
 void main() async {
