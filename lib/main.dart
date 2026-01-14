@@ -1,9 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -93,7 +94,11 @@ void main() async {
     return true; // Предотвращаем краш приложения
   };
 
-  runApp(const MyApp());
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -101,9 +106,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
+    return provider.MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        provider.ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: MaterialApp.router(
         title: 'Cleanapp',

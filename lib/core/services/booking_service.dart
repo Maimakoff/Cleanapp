@@ -1,14 +1,16 @@
 import 'package:cleanapp/core/models/booking.dart';
 import 'package:cleanapp/core/domain/repositories/booking_repository.dart';
-import 'package:cleanapp/core/data/repositories/booking_repository_impl.dart';
+import 'package:cleanapp/core/providers/repository_providers.dart';
+import 'package:cleanapp/core/providers/provider_container_helper.dart';
 import 'package:cleanapp/core/domain/entities/booking.dart' as domain;
 
 /// Service layer for booking operations.
 /// Uses BookingRepository interface to abstract data source.
 /// Maintains static API for backward compatibility.
 class BookingService {
-  // Singleton instance of BookingRepository
-  static final BookingRepository _repository = BookingRepositoryImpl();
+  // Get repository from Riverpod provider
+  static BookingRepository get _repository =>
+      ProviderContainerHelper.container.read(bookingRepositoryProvider);
 
   // Create order using BookingRepository
   static Future<Map<String, dynamic>> createOrder({

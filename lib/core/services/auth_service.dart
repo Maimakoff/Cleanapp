@@ -1,13 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cleanapp/core/domain/repositories/auth_repository.dart';
-import 'package:cleanapp/core/data/repositories/auth_repository_impl.dart';
+import 'package:cleanapp/core/providers/repository_providers.dart';
+import 'package:cleanapp/core/providers/provider_container_helper.dart';
 
 /// Service layer for authentication operations.
 /// Uses AuthRepository interface to abstract data source.
 /// Maintains static API for backward compatibility.
 class AuthService {
-  // Singleton instance of AuthRepository
-  static final AuthRepository _repository = AuthRepositoryImpl();
+  // Get repository from Riverpod provider
+  static AuthRepository get _repository =>
+      ProviderContainerHelper.container.read(authRepositoryProvider);
 
   static User? get currentUser => _repository.getCurrentUser();
   static Session? get currentSession => _repository.getCurrentSession();
