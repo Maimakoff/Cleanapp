@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -9,6 +9,8 @@ import 'core/providers/auth_provider.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/date_formatter.dart';
+import 'core/utils/logger.dart';
+import 'core/widgets/error_fallback_widget.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -80,18 +82,45 @@ void main() async {
     debugPrint('');
   }
 
-  // Устанавливаем глобальный обработчик ошибок Flutter
+  // Global error handler for Flutter framework errors
   FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    debugPrint('🚨 Flutter Error: ${details.exception}');
-    debugPrint('Stack trace: ${details.stack}');
+    // Log error using centralized logger
+    AppLogger.logError(
+      details.exception,
+      stackTrace: details.stack,
+      context: 'Flutter Framework',
+      additionalInfo: {
+        'library': details.library,
+        'information': details.informationCollector?.call().join('\n'),
+      },
+    );
+
+    // In debug mode, show the error overlay
+    // In production, errors are handled by ErrorWidget.builder
+    if (kDebugMode) {
+      FlutterError.presentError(details);
+    }
   };
 
-  // Обработчик ошибок для асинхронных операций
+  // Global error handler for uncaught async errors
   PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('🚨 Async Error: $error');
-    debugPrint('Stack trace: $stack');
-    return true; // Предотвращаем краш приложения
+    // Log error using centralized logger
+    AppLogger.logError(
+      error,
+      stackTrace: stack,
+      context: 'Async Error',
+    );
+
+    // Return true to prevent app crash
+    return true;
+  };
+
+  // Custom error widget builder to prevent red screen of death
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return ErrorFallbackWidget(
+      errorDetails: details,
+      customMessage: 'Произошла ошибка при отображении интерфейса.',
+    );
   };
 
   runApp(
@@ -118,7 +147,7 @@ class MyApp extends StatelessWidget {
         themeMode: ThemeMode.system,
         routerConfig: AppRouter.router,
         builder: (context, child) {
-          // Глобальная обработка ошибок UI
+          // Global error boundary for UI
           return MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
             child: child ?? const SizedBox.shrink(),

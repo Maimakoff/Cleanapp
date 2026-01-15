@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:cleanapp/core/models/booking.dart';
+import 'package:cleanapp/core/utils/network_call_wrapper.dart';
 
 class SupabaseService {
   static SupabaseClient? _client;
@@ -77,54 +79,23 @@ class SupabaseService {
     required String password,
     Map<String, dynamic>? data,
   }) async {
-    try {
-      // Проверяем инициализацию перед запросом
-      if (!Supabase.instance.isInitialized) {
-        throw Exception(
-          'Supabase не инициализирован. Проверьте файл .env и перезапустите приложение'
-        );
-      }
-      
-      return await client.auth.signUp(
+    // Проверяем инициализацию перед запросом
+    if (!Supabase.instance.isInitialized) {
+      throw Exception(
+        'Supabase не инициализирован. Проверьте файл .env и перезапустите приложение'
+      );
+    }
+
+    return await NetworkCallWrapper.execute<AuthResponse>(
+      operation: () => client.auth.signUp(
         email: email,
         password: password,
         data: data,
         emailRedirectTo: 'cleanapp://auth-callback',
-      );
-    } catch (e) {
-      final errorStr = e.toString().toLowerCase();
-      
-      // Check if Supabase is not initialized
-      if (errorStr.contains('supabase') && 
-          (errorStr.contains('not initialized') ||
-           errorStr.contains('_isinitialized') ||
-           errorStr.contains('must initialize'))) {
-        throw Exception(
-          'Supabase не настроен. Проверьте файл .env с SUPABASE_URL и SUPABASE_ANON_KEY и перезапустите приложение'
-        );
-      }
-      
-      // Обработка сетевых ошибок
-      if (errorStr.contains('socketexception') ||
-          errorStr.contains('network') ||
-          errorStr.contains('connection') ||
-          errorStr.contains('failed host lookup')) {
-        throw Exception(
-          'Ошибка сети. Проверьте интернет-соединение и попробуйте снова'
-        );
-      }
-      
-      // Обработка таймаутов
-      if (errorStr.contains('timeout') ||
-          errorStr.contains('timed out')) {
-        throw Exception(
-          'Превышено время ожидания. Проверьте интернет-соединение'
-        );
-      }
-      
-      // Пробрасываем оригинальную ошибку, если это известная ошибка Supabase
-      rethrow;
-    }
+      ),
+      timeout: const Duration(seconds: 30),
+      context: 'Auth.signUp',
+    );
   }
 
   // Sign in
@@ -132,78 +103,47 @@ class SupabaseService {
     required String email,
     required String password,
   }) async {
+    // Проверяем инициализацию перед запросом
+    if (!Supabase.instance.isInitialized) {
+      throw Exception(
+        'Supabase не инициализирован. Проверьте файл .env и перезапустите приложение'
+      );
+    }
+
     try {
-      // Проверяем инициализацию перед запросом
-      if (!Supabase.instance.isInitialized) {
-        throw Exception(
-          'Supabase не инициализирован. Проверьте файл .env и перезапустите приложение'
-        );
-      }
-      
-      return await client.auth.signInWithPassword(
-        email: email,
-        password: password,
+      return await NetworkCallWrapper.execute<AuthResponse>(
+        operation: () => client.auth.signInWithPassword(
+          email: email,
+          password: password,
+        ),
+        timeout: const Duration(seconds: 30),
+        context: 'Auth.signIn',
       );
     } catch (e) {
-      final errorStr = e.toString().toLowerCase();
-      
-      // Check if Supabase is not initialized
-      if (errorStr.contains('supabase') && 
-          (errorStr.contains('not initialized') ||
-           errorStr.contains('_isinitialized') ||
-           errorStr.contains('must initialize'))) {
-        throw Exception(
-          'Supabase не настроен. Проверьте файл .env с SUPABASE_URL и SUPABASE_ANON_KEY и перезапустите приложение'
-        );
-      }
-      
-      // Обработка ошибок аутентификации Supabase
+      // Обработка ошибок аутентификации Supabase (не сетевые)
       if (e is AuthException) {
         final message = e.message.toLowerCase();
         
-        // Неверные учетные данные (может быть неверный email или пароль)
         if (message.contains('invalid login credentials') ||
             message.contains('invalid credentials') ||
             message.contains('invalid email or password')) {
-          // Проверяем, существует ли пользователь (попытка определить причину)
-          // Но Supabase не различает неверный email и неверный пароль для безопасности
           throw Exception('Invalid login credentials');
         }
         
-        // Email не подтвержден
         if (message.contains('email not confirmed') ||
             message.contains('email not verified')) {
           throw Exception('Email not confirmed');
         }
         
-        // Слишком много попыток
         if (message.contains('too many requests') ||
             message.contains('rate limit')) {
           throw Exception('Too many requests');
         }
         
-        // Пробрасываем оригинальное сообщение AuthException
         throw Exception(e.message);
       }
       
-      // Обработка сетевых ошибок
-      if (errorStr.contains('socketexception') ||
-          errorStr.contains('network') ||
-          errorStr.contains('connection') ||
-          errorStr.contains('failed host lookup')) {
-        throw Exception(
-          'Ошибка сети. Проверьте интернет-соединение и попробуйте снова'
-        );
-      }
-      
-      // Обработка таймаутов
-      if (errorStr.contains('timeout') ||
-          errorStr.contains('timed out')) {
-        throw Exception(
-          'Превышено время ожидания. Проверьте интернет-соединение'
-        );
-      }
-      
+      // Network errors are already handled by NetworkCallWrapper
       rethrow;
     }
   }
@@ -239,20 +179,18 @@ class SupabaseService {
   // Get bookings
   static Future<List<Booking>> getBookings() async {
     try {
-      final response = await client
-          .from('bookings')
-          .select()
-          .order('created_at', ascending: false)
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания');
-            },
-          );
+      final response = await NetworkCallWrapper.execute<List<dynamic>>(
+        operation: () => client
+            .from('bookings')
+            .select()
+            .order('created_at', ascending: false),
+        timeout: const Duration(seconds: 15),
+        context: 'Bookings.getBookings',
+      );
 
       if (response.isEmpty) return [];
 
-      return (response as List)
+      return response
           .map((json) => Booking.fromJson(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
@@ -264,21 +202,19 @@ class SupabaseService {
   // Get user bookings
   static Future<List<Booking>> getUserBookings(String userId) async {
     try {
-      final response = await client
-          .from('bookings')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false)
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания');
-            },
-          );
+      final response = await NetworkCallWrapper.execute<List<dynamic>>(
+        operation: () => client
+            .from('bookings')
+            .select()
+            .eq('user_id', userId)
+            .order('created_at', ascending: false),
+        timeout: const Duration(seconds: 15),
+        context: 'Bookings.getUserBookings',
+      );
 
       if (response.isEmpty) return [];
 
-      return (response as List)
+      return response
           .map((json) {
             try {
               return Booking.fromJson(json as Map<String, dynamic>);
@@ -305,18 +241,16 @@ class SupabaseService {
   // Get booked dates (for calendar)
   static Future<List<Map<String, dynamic>>> getBookedDates() async {
     try {
-      final response = await client
-          .from('bookings')
-          .select('date, time')
-          .eq('status', 'confirmed')
-          .timeout(
-            const Duration(seconds: 8),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания');
-            },
-          );
+      final response = await NetworkCallWrapper.execute<List<dynamic>>(
+        operation: () => client
+            .from('bookings')
+            .select('date, time')
+            .eq('status', 'confirmed'),
+        timeout: const Duration(seconds: 10),
+        context: 'Bookings.getBookedDates',
+      );
 
-      return (response as List).cast<Map<String, dynamic>>();
+      return response.cast<Map<String, dynamic>>();
     } catch (e) {
       // Возвращаем пустой список при ошибке, чтобы календарь работал
       return [];
@@ -326,19 +260,17 @@ class SupabaseService {
   // Get available dates/times
   static Future<List<Map<String, dynamic>>> getBookedSlots() async {
     try {
-      final response = await client
-          .from('bookings')
-          .select('date, time')
-          .eq('status', 'new')
-          .or('status.eq.accepted')
-          .timeout(
-            const Duration(seconds: 8),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания');
-            },
-          );
+      final response = await NetworkCallWrapper.execute<List<dynamic>>(
+        operation: () => client
+            .from('bookings')
+            .select('date, time')
+            .eq('status', 'new')
+            .or('status.eq.accepted'),
+        timeout: const Duration(seconds: 10),
+        context: 'Bookings.getBookedSlots',
+      );
 
-      return (response as List).cast<Map<String, dynamic>>();
+      return response.cast<Map<String, dynamic>>();
     } catch (e) {
       // Возвращаем пустой список при ошибке
       return [];
@@ -347,24 +279,22 @@ class SupabaseService {
 
   // Update booking status (with access control)
   static Future<void> updateBookingStatus(String bookingId, String status) async {
-    try {
-      final user = currentUser;
-      if (user == null) {
-        throw Exception('Необходима авторизация');
-      }
+    final user = currentUser;
+    if (user == null) {
+      throw Exception('Необходима авторизация');
+    }
 
+    try {
       // Проверяем права доступа: только админ или владелец заказа могут изменять статус
-      final booking = await client
-          .from('bookings')
-          .select('user_id')
-          .eq('id', bookingId)
-          .single()
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания');
-            },
-          );
+      final booking = await NetworkCallWrapper.execute<Map<String, dynamic>>(
+        operation: () => client
+            .from('bookings')
+            .select('user_id')
+            .eq('id', bookingId)
+            .single(),
+        timeout: const Duration(seconds: 15),
+        context: 'Bookings.updateBookingStatus.check',
+      );
 
       final bookingUserId = booking['user_id'] as String?;
       final isAdmin = getUserRole() == 'admin';
@@ -380,19 +310,17 @@ class SupabaseService {
         throw Exception('Недопустимый статус');
       }
 
-      await client
-          .from('bookings')
-          .update({
-            'status': status.toLowerCase(),
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', bookingId)
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания');
-            },
-          );
+      await NetworkCallWrapper.execute<void>(
+        operation: () => client
+            .from('bookings')
+            .update({
+              'status': status.toLowerCase(),
+              'updated_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', bookingId),
+        timeout: const Duration(seconds: 15),
+        context: 'Bookings.updateBookingStatus.update',
+      );
     } catch (e) {
       final errorStr = e.toString().toLowerCase();
       if (errorStr.contains('недостаточно прав') || 
@@ -400,6 +328,7 @@ class SupabaseService {
           errorStr.contains('недопустимый статус')) {
         rethrow;
       }
+      // Network errors are already handled by NetworkCallWrapper
       throw Exception('Ошибка обновления статуса. Попробуйте позже');
     }
   }
@@ -428,17 +357,17 @@ class SupabaseService {
 
   // Upload avatar to Supabase Storage
   static Future<String> uploadAvatar(String userId, List<int> imageBytes, String fileName) async {
-    try {
-      if (!Supabase.instance.isInitialized) {
-        throw Exception('Supabase не инициализирован');
-      }
-      
-      final path = '$userId/$fileName';
-      
-      // Конвертируем List<int> в Uint8List
-      final uint8List = Uint8List.fromList(imageBytes);
-      
-      await client.storage
+    if (!Supabase.instance.isInitialized) {
+      throw Exception('Supabase не инициализирован');
+    }
+    
+    final path = '$userId/$fileName';
+    
+    // Конвертируем List<int> в Uint8List
+    final uint8List = Uint8List.fromList(imageBytes);
+    
+    await NetworkCallWrapper.execute<void>(
+      operation: () => client.storage
           .from('avatars')
           .uploadBinary(
             path,
@@ -447,13 +376,13 @@ class SupabaseService {
               upsert: true,
               contentType: 'image/jpeg',
             ),
-          );
-      
-      final url = client.storage.from('avatars').getPublicUrl(path);
-      return url;
-    } catch (e) {
-      throw Exception('Ошибка загрузки аватара: ${e.toString()}');
-    }
+          ),
+      timeout: const Duration(seconds: 60), // Longer timeout for file uploads
+      context: 'Storage.uploadAvatar',
+    );
+    
+    final url = client.storage.from('avatars').getPublicUrl(path);
+    return url;
   }
 
   // Get avatar URL
@@ -602,7 +531,7 @@ class SupabaseService {
           .order('discount_percentage', ascending: false)
           .limit(1);
 
-      return (response as List).cast<Map<String, dynamic>>();
+      return response.cast<Map<String, dynamic>>();
     } catch (e) {
       return [];
     }

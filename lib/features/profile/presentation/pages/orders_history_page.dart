@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/core/models/booking.dart';
 import 'package:cleanapp/core/utils/date_formatter.dart';
+import 'package:cleanapp/core/widgets/loading_state_widget.dart';
+import 'package:cleanapp/core/widgets/empty_state_widget.dart';
+import 'package:cleanapp/core/widgets/error_state_widget.dart';
 
 class OrdersHistoryPage extends StatefulWidget {
   const OrdersHistoryPage({super.key});
@@ -14,6 +17,7 @@ class OrdersHistoryPage extends StatefulWidget {
 class _OrdersHistoryPageState extends State<OrdersHistoryPage> {
   List<Booking> _bookings = [];
   bool _isLoading = true;
+  String? _errorMessage;
   String _filterStatus = 'all'; // all, pending, confirmed, completed, cancelled
 
   @override
@@ -24,20 +28,20 @@ class _OrdersHistoryPageState extends State<OrdersHistoryPage> {
 
   Future<void> _loadBookings() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
       final user = SupabaseService.currentUser;
       if (user != null) {
-        final bookings = await SupabaseService.getUserBookings(user.id)
-            .timeout(
-              const Duration(seconds: 10),
-              onTimeout: () => <Booking>[],
-            );
+        final bookings = await SupabaseService.getUserBookings(user.id);
         if (mounted) {
           setState(() {
             _bookings = bookings;
             _isLoading = false;
+            _errorMessage = null;
           });
         }
       } else {
@@ -45,24 +49,28 @@ class _OrdersHistoryPageState extends State<OrdersHistoryPage> {
           setState(() {
             _bookings = [];
             _isLoading = false;
+            _errorMessage = null;
           });
         }
       }
     } catch (e) {
       if (mounted) {
+        final errorStr = e.toString();
+        String userMessage = 'Не удалось загрузить заказы. Попробуйте обновить страницу.';
+        
+        if (errorStr.contains('Нет подключения') || 
+            errorStr.contains('интернет')) {
+          userMessage = 'Нет подключения к интернету. Проверьте соединение.';
+        } else if (errorStr.contains('Превышено время ожидания') ||
+            errorStr.contains('timeout')) {
+          userMessage = 'Превышено время ожидания. Проверьте интернет-соединение.';
+        }
+        
         setState(() {
           _bookings = [];
           _isLoading = false;
+          _errorMessage = userMessage;
         });
-        // Показываем сообщение об ошибке только если это не просто пустой список
-        if (e.toString().contains('Превышено время ожидания')) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Проверьте интернет-соединение'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
       }
     }
   }
@@ -109,35 +117,18 @@ class _OrdersHistoryPageState extends State<OrdersHistoryPage> {
         title: const Text('История заказов'),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _bookings.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.shopping_bag_outlined,
-                        size: 64,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'У вас пока нет заказов',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Сделайте первый заказ!',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
+          ? const LoadingStateWidget(message: 'Загрузка заказов...')
+          : _errorMessage != null
+              ? ErrorStateWidget(
+                  message: _errorMessage!,
+                  onRetry: _loadBookings,
                 )
+              : _bookings.isEmpty
+                  ? const EmptyStateWidget(
+                      icon: Icons.shopping_bag_outlined,
+                      title: 'У вас пока нет заказов',
+                      subtitle: 'Сделайте первый заказ!',
+                    )
               : Column(
                   children: [
                     // Filter Chips

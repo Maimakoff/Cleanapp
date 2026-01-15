@@ -20,6 +20,7 @@ class _AuthFormState extends State<AuthForm> {
   bool _isLogin = true;
   bool _isLoading = false;
   bool _isForgotPassword = false;
+  DateTime? _lastSubmitTime; // Race condition protection
 
   @override
   void dispose() {
@@ -34,7 +35,16 @@ class _AuthFormState extends State<AuthForm> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_isLoading) return; // Предотвращаем повторные запросы
+    // Double-submit protection
+    if (_isLoading) return;
+
+    // Race condition protection: prevent multiple rapid submissions
+    final now = DateTime.now();
+    if (_lastSubmitTime != null && 
+        now.difference(_lastSubmitTime!).inMilliseconds < 2000) {
+      return; // Ignore if submitted less than 2 seconds ago
+    }
+    _lastSubmitTime = now;
 
     setState(() => _isLoading = true);
 
@@ -379,7 +389,9 @@ class _AuthFormState extends State<AuthForm> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () => setState(() => _isForgotPassword = true),
+                  onPressed: _isLoading 
+                      ? null 
+                      : () => setState(() => _isForgotPassword = true),
                   child: const Text('Забыли пароль?'),
                 ),
               ),
@@ -393,6 +405,7 @@ class _AuthFormState extends State<AuthForm> {
             onPressed: (_isLoading || !mounted) ? null : _handleSubmit,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 50),
+              disabledBackgroundColor: Colors.grey,
             ),
             child: _isLoading
                 ? const SizedBox(
@@ -411,15 +424,17 @@ class _AuthFormState extends State<AuthForm> {
           ),
           const SizedBox(height: 16),
           TextButton(
-            onPressed: () {
-              setState(() {
-                if (_isForgotPassword) {
-                  _isForgotPassword = false;
-                } else {
-                  _isLogin = !_isLogin;
-                }
-              });
-            },
+            onPressed: _isLoading 
+                ? null 
+                : () {
+                    setState(() {
+                      if (_isForgotPassword) {
+                        _isForgotPassword = false;
+                      } else {
+                        _isLogin = !_isLogin;
+                      }
+                    });
+                  },
             child: Text(
               _isForgotPassword
                   ? 'Вернуться к входу'

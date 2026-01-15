@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
+import 'package:cleanapp/core/widgets/loading_state_widget.dart';
+import 'package:cleanapp/core/widgets/error_state_widget.dart';
 import 'package:cleanapp/core/models/booking.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -19,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic> _userStats = {};
   List<Booking> _bookings = [];
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -27,7 +30,11 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadProfileData() async {
-    setState(() => _isLoading = true);
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     
     try {
       final user = SupabaseService.currentUser;
@@ -51,16 +58,34 @@ class _ProfilePageState extends State<ProfilePage> {
             _bookings = bookings;
             _avatarUrl = avatarUrl;
             _isLoading = false;
+            _errorMessage = null;
           });
         }
       } else {
         if (mounted) {
-          setState(() => _isLoading = false);
+          setState(() {
+            _isLoading = false;
+            _errorMessage = null;
+          });
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        final errorStr = e.toString();
+        String userMessage = 'Не удалось загрузить данные профиля.';
+        
+        if (errorStr.contains('Нет подключения') || 
+            errorStr.contains('интернет')) {
+          userMessage = 'Нет подключения к интернету. Проверьте соединение.';
+        } else if (errorStr.contains('Превышено время ожидания') ||
+            errorStr.contains('timeout')) {
+          userMessage = 'Превышено время ожидания. Проверьте интернет-соединение.';
+        }
+        
+        setState(() {
+          _isLoading = false;
+          _errorMessage = userMessage;
+        });
       }
     }
   }
@@ -183,10 +208,15 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             )
           : _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                  onRefresh: _loadProfileData,
-                  child: SingleChildScrollView(
+              ? const LoadingStateWidget(message: 'Загрузка профиля...')
+              : _errorMessage != null
+                  ? ErrorStateWidget(
+                      message: _errorMessage!,
+                      onRetry: _loadProfileData,
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadProfileData,
+                      child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     child: Column(

@@ -20,6 +20,7 @@ class _BookingPageState extends State<BookingPage> {
   String _paymentMethod = 'kaspi';
   bool _promoApplied = false;
   bool _saving = false;
+  DateTime? _lastSubmitTime; // Race condition protection
 
   @override
   void dispose() {
@@ -49,7 +50,16 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   Future<void> _handleConfirm() async {
+    // Double-submit protection
     if (_saving) return;
+    
+    // Race condition protection: prevent multiple rapid submissions
+    final now = DateTime.now();
+    if (_lastSubmitTime != null && 
+        now.difference(_lastSubmitTime!).inMilliseconds < 2000) {
+      return; // Ignore if submitted less than 2 seconds ago
+    }
+    _lastSubmitTime = now;
     
     // Валидация адреса
     final addressError = Validators.validateAddress(_addressController.text);
@@ -393,8 +403,9 @@ class _BookingPageState extends State<BookingPage> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
-                            onPressed:
-                                _promoApplied ? null : _applyPromo,
+                            onPressed: (_promoApplied || _saving) 
+                                ? null 
+                                : _applyPromo,
                             child: const Text('Применить'),
                           ),
                         ],
@@ -445,7 +456,9 @@ class _BookingPageState extends State<BookingPage> {
                               label: 'Kaspi',
                               subtitle: 'Kaspi Pay',
                               isSelected: _paymentMethod == 'kaspi',
-                              onTap: () => setState(() => _paymentMethod = 'kaspi'),
+                              onTap: _saving 
+                                  ? () {} 
+                                  : () => setState(() => _paymentMethod = 'kaspi'),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -455,7 +468,9 @@ class _BookingPageState extends State<BookingPage> {
                               label: 'Apple',
                               subtitle: 'Apple Pay',
                               isSelected: _paymentMethod == 'apple',
-                              onTap: () => setState(() => _paymentMethod = 'apple'),
+                              onTap: _saving 
+                                  ? () {} 
+                                  : () => setState(() => _paymentMethod = 'apple'),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -465,7 +480,9 @@ class _BookingPageState extends State<BookingPage> {
                               label: 'Карта',
                               subtitle: 'Visa/MC',
                               isSelected: _paymentMethod == 'card',
-                              onTap: () => setState(() => _paymentMethod = 'card'),
+                              onTap: _saving 
+                                  ? () {} 
+                                  : () => setState(() => _paymentMethod = 'card'),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -475,7 +492,9 @@ class _BookingPageState extends State<BookingPage> {
                               label: 'Наличные',
                               subtitle: 'При получении',
                               isSelected: _paymentMethod == 'cash',
-                              onTap: () => setState(() => _paymentMethod = 'cash'),
+                              onTap: _saving 
+                                  ? () {} 
+                                  : () => setState(() => _paymentMethod = 'cash'),
                             ),
                           ),
                         ],

@@ -1,6 +1,7 @@
 import 'package:cleanapp/core/domain/repositories/booking_repository.dart';
 import 'package:cleanapp/core/domain/entities/booking.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
+import 'package:cleanapp/core/utils/network_call_wrapper.dart';
 import 'package:cleanapp/core/models/booking.dart' as data_model;
 
 /// Implementation of BookingRepository using Supabase.
@@ -77,19 +78,17 @@ class BookingRepositoryImpl implements BookingRepository {
         'payment_method': paymentMethod,
       };
 
-      final response = await SupabaseService.client
-          .from('bookings')
-          .insert(bookingData)
-          .select()
-          .single()
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Превышено время ожидания. Проверьте интернет-соединение');
-            },
-          );
+      final response = await NetworkCallWrapper.execute<Map<String, dynamic>>(
+        operation: () => SupabaseService.client
+            .from('bookings')
+            .insert(bookingData)
+            .select()
+            .single(),
+        timeout: const Duration(seconds: 30),
+        context: 'BookingRepository.createBooking',
+      );
 
-      createdBookings.add(data_model.Booking.fromJson(Map<String, dynamic>.from(response)));
+      createdBookings.add(data_model.Booking.fromJson(response));
     }
 
     // Return the first created booking

@@ -6,6 +6,7 @@ import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
 import 'package:cleanapp/core/models/booking.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/core/utils/date_formatter.dart';
+import 'package:cleanapp/core/widgets/loading_state_widget.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -22,6 +23,8 @@ class _CalendarPageState extends State<CalendarPage> {
   List<Map<String, dynamic>> _bookings = [];
   String? _tariffId;
   String? _tariffName;
+  bool _isLoadingBookings = true;
+  String? _loadingError;
 
   final List<String> _timeSlots = [
     '09:00', '10:00', '11:00', '12:00',
@@ -53,22 +56,38 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   Future<void> _loadBookings() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingBookings = true;
+      _loadingError = null;
+    });
+
     try {
-      final bookings = await SupabaseService.getBookedDates()
-          .timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => <Map<String, dynamic>>[],
-          );
+      final bookings = await SupabaseService.getBookedDates();
       if (mounted) {
         setState(() {
           _bookings = bookings;
+          _isLoadingBookings = false;
+          _loadingError = null;
         });
       }
     } catch (e) {
-      // Обрабатываем ошибку тихо, чтобы календарь работал даже без данных
       if (mounted) {
+        final errorStr = e.toString();
+        String userMessage = 'Не удалось загрузить занятые даты. Календарь может работать некорректно.';
+        
+        if (errorStr.contains('Нет подключения') || 
+            errorStr.contains('интернет')) {
+          userMessage = 'Нет подключения к интернету. Проверьте соединение.';
+        } else if (errorStr.contains('Превышено время ожидания') ||
+            errorStr.contains('timeout')) {
+          userMessage = 'Превышено время ожидания. Проверьте интернет-соединение.';
+        }
+        
         setState(() {
           _bookings = [];
+          _isLoadingBookings = false;
+          _loadingError = userMessage;
         });
       }
     }
@@ -160,10 +179,45 @@ class _CalendarPageState extends State<CalendarPage> {
       appBar: AppBar(
         title: const Text('Календарь'),
       ),
-      body: Column(
-        children: [
-          // Header
-          Container(
+      body: _isLoadingBookings
+          ? const LoadingStateWidget(message: 'Загрузка календаря...')
+          : Column(
+                  children: [
+                    // Error banner (non-blocking)
+                    if (_loadingError != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        color: Colors.orange.shade50,
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, 
+                                 color: Colors.orange.shade700, 
+                                 size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _loadingError!,
+                                style: TextStyle(
+                                  color: Colors.orange.shade900,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _loadBookings,
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text('Обновить'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Header
+                    Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Theme.of(context).cardColor,
@@ -388,8 +442,8 @@ class _CalendarPageState extends State<CalendarPage> {
                 ),
               ),
             ),
-        ],
-      ),
+                  ],
+                ),
       bottomNavigationBar: const BottomNavBar(currentIndex: 2),
     );
   }
