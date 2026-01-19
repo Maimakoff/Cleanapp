@@ -16,6 +16,7 @@ import 'package:cleanapp/features/admin/presentation/pages/admin_dashboard_page.
 import 'package:cleanapp/features/cleaner/presentation/pages/cleaner_dashboard_page.dart';
 import 'package:cleanapp/features/home/presentation/pages/not_found_page.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
+import 'package:cleanapp/core/widgets/main_scaffold.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -50,7 +51,7 @@ class AppRouter {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const HomePage(),
+        builder: (context, state) => const MainScaffold(child: HomePage()),
       ),
       GoRoute(
         path: '/auth',
@@ -58,15 +59,15 @@ class AppRouter {
       ),
       GoRoute(
         path: '/search',
-        builder: (context, state) => const SearchPage(),
+        builder: (context, state) => const MainScaffold(child: SearchPage()),
       ),
       GoRoute(
         path: '/calendar',
-        builder: (context, state) => const CalendarPage(),
+        builder: (context, state) => const MainScaffold(child: CalendarPage()),
       ),
       GoRoute(
         path: '/tariffs',
-        builder: (context, state) => const TariffsPage(),
+        builder: (context, state) => const MainScaffold(child: TariffsPage()),
       ),
       GoRoute(
         path: '/tariff/:id',
@@ -90,7 +91,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/profile',
-        builder: (context, state) => const ProfilePage(),
+        builder: (context, state) => const MainScaffold(child: ProfilePage()),
       ),
       GoRoute(
         path: '/settings',

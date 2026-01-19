@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
-import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
 import 'package:cleanapp/core/widgets/loading_state_widget.dart';
 import 'package:cleanapp/core/widgets/error_state_widget.dart';
 import 'package:cleanapp/core/models/booking.dart';
@@ -515,7 +514,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                 ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 4),
     );
   }
 }

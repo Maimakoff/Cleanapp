@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/features/home/presentation/widgets/news_carousel.dart';
 import 'package:cleanapp/features/home/presentation/widgets/quick_services.dart';
-import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
 import 'package:cleanapp/core/widgets/app_logo.dart';
 
 class HomePage extends StatelessWidget {
@@ -134,7 +133,6 @@ class HomePage extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 0),
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
-import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
 import 'package:cleanapp/core/models/booking.dart';
 import 'package:cleanapp/core/services/supabase_service.dart';
 import 'package:cleanapp/core/utils/date_formatter.dart';
@@ -444,7 +443,6 @@ class _CalendarPageState extends State<CalendarPage> {
             ),
                   ],
                 ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 2),
     );
   }
 }

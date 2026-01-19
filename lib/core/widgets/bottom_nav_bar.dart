@@ -1,72 +1,72 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 /// Нижняя панель навигации с фиксированной высотой и оптимизацией перерисовок
 /// 
 /// Использует RepaintBoundary для предотвращения лишних перерисовок
 /// и фиксированную высоту для стабильного позиционирования
+/// 
+/// Создаётся ОДИН РАЗ и не пересоздаётся при навигации
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
+  final ValueChanged<int> onTabTapped;
 
   const BottomNavBar({
     super.key,
     required this.currentIndex,
+    required this.onTabTapped,
   });
 
   @override
   Widget build(BuildContext context) {
     // Используем RepaintBoundary для предотвращения лишних перерисовок
     return RepaintBoundary(
-      child: SafeArea(
-        top: false, // Отключаем SafeArea сверху, так как панель внизу
-        child: Container(
-          // Фиксированная высота контента панели
-          height: 64,
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 4,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
+      child: Container(
+        // Фиксированная высота контента панели (без SafeArea для стабильности)
+        height: 64,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 4,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
               _NavItem(
                 icon: Icons.home,
                 label: 'Главная',
                 isActive: currentIndex == 0,
-                onTap: () => context.go('/'),
+                onTap: () => onTabTapped(0),
               ),
               _NavItem(
                 icon: Icons.search,
                 label: 'Поиск',
                 isActive: currentIndex == 1,
-                onTap: () => context.go('/search'),
+                onTap: () => onTabTapped(1),
               ),
               _NavItem(
                 icon: Icons.calendar_today,
                 label: 'Календарь',
                 isActive: currentIndex == 2,
-                onTap: () => context.go('/calendar'),
+                onTap: () => onTabTapped(2),
               ),
               _NavItem(
                 icon: Icons.star,
                 label: 'Тарифы',
                 isActive: currentIndex == 3,
-                onTap: () => context.go('/tariffs'),
+                onTap: () => onTabTapped(3),
               ),
               _NavItem(
                 icon: Icons.person,
                 label: 'Профиль',
                 isActive: currentIndex == 4,
-                onTap: () => context.go('/profile'),
+                onTap: () => onTabTapped(4),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -113,24 +113,20 @@ class _NavItem extends StatelessWidget {
                     size: 24,
                   ),
                   const SizedBox(height: 4),
-                  // Фиксированная высота текста для предотвращения изменения layout
+                  // Фиксированная высота текста БЕЗ анимации для стабильности layout
                   SizedBox(
                     height: 14,
-                    child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                         color: isActive
                             ? Theme.of(context).colorScheme.primary
                             : Colors.grey[600],
-                      ),
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),

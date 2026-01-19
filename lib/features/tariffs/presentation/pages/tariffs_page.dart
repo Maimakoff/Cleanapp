@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cleanapp/core/data/services_data.dart';
 import 'package:cleanapp/core/models/tariff.dart';
-import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
 import 'package:go_router/go_router.dart';
 
 class TariffsPage extends StatelessWidget {
@@ -35,7 +34,6 @@ class TariffsPage extends StatelessWidget {
           );
         },
       ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 3),
     );
   }
 }

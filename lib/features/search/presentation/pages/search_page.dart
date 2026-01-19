@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cleanapp/core/data/services_data.dart';
 import 'package:cleanapp/core/models/service.dart';
-import 'package:cleanapp/core/widgets/bottom_nav_bar.dart';
 import 'package:go_router/go_router.dart';
 
 class SearchPage extends StatefulWidget {
@@ -169,7 +168,6 @@ class _SearchPageState extends State<SearchPage> {
           ),
         ],
       ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 1),
     );
   }
 }
