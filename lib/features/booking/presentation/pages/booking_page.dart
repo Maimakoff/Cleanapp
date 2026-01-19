@@ -16,6 +16,7 @@ class _BookingPageState extends State<BookingPage> {
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
   final _promoCodeController = TextEditingController();
+  final _areaController = TextEditingController();
   
   String _paymentMethod = 'kaspi';
   bool _promoApplied = false;
@@ -23,10 +24,38 @@ class _BookingPageState extends State<BookingPage> {
   DateTime? _lastSubmitTime; // Race condition protection
 
   @override
+  void initState() {
+    super.initState();
+    // Добавляем слушатель для автоматического пересчёта цены
+    _areaController.addListener(_onAreaChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Инициализируем площадь из URL, если есть (только один раз)
+    if (_areaController.text.isEmpty) {
+      final state = GoRouterState.of(context);
+      final uri = state.uri;
+      final areaFromUrl = uri.queryParameters['area'] ?? '';
+      if (areaFromUrl.isNotEmpty) {
+        _areaController.text = areaFromUrl;
+      }
+    }
+  }
+
+  void _onAreaChanged() {
+    // Пересчитываем цену при изменении площади
+    setState(() {});
+  }
+
+  @override
   void dispose() {
     _addressController.dispose();
     _phoneController.dispose();
     _promoCodeController.dispose();
+    _areaController.removeListener(_onAreaChanged);
+    _areaController.dispose();
     super.dispose();
   }
 
@@ -83,6 +112,17 @@ class _BookingPageState extends State<BookingPage> {
       return;
     }
 
+    // Валидация площади
+    final areaError = Validators.validateArea(_areaController.text);
+    if (areaError != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(areaError)),
+        );
+      }
+      return;
+    }
+
     if (!mounted) return;
     setState(() => _saving = true);
 
@@ -96,7 +136,6 @@ class _BookingPageState extends State<BookingPage> {
       final tariffId = uri.queryParameters['tariff'] ?? 
                        uri.queryParameters['tariffId'] ?? 
                        'default-tariff';
-      final areaStr = uri.queryParameters['area'] ?? '';
 
       if (dateStr.isEmpty || time.isEmpty) {
         throw Exception('Дата и время не указаны');
@@ -122,14 +161,15 @@ class _BookingPageState extends State<BookingPage> {
       // Create SelectedDate
       final selectedDate = SelectedDate(date: date, time: time);
       
-      // Parse area if provided
-      int? area;
-      if (areaStr.isNotEmpty) {
-        area = int.tryParse(areaStr);
+      // Parse area from input field (обязательное поле)
+      final areaText = _areaController.text.trim();
+      final area = int.tryParse(areaText);
+      if (area == null || area <= 0) {
+        throw Exception('Некорректная площадь');
       }
 
-      // Calculate final price
-      final basePrice = _calculateTotalPrice(tariffId, areaStr);
+      // Calculate final price using new calculator logic
+      final basePrice = _calculateTotalPrice(tariffId, area);
       final finalPrice = _promoApplied 
           ? (basePrice * 0.9).round() 
           : basePrice;
@@ -190,46 +230,43 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-  int _calculateTotalPrice(String tariffId, String areaStr) {
-    // Если total не передан или равен 0, пересчитываем
-    final state = GoRouterState.of(context);
-    final uri = state.uri;
-    final totalFromUrl = int.tryParse(uri.queryParameters['total'] ?? '0') ?? 0;
-    
-    // Если цена уже передана и не равна 0, используем её
-    if (totalFromUrl > 0) {
-      return totalFromUrl;
-    }
-    
-    // Иначе пересчитываем на основе тарифа
-    final area = int.tryParse(areaStr) ?? 50;
-    
-    // Для мебели минимальная цена 5000
+  /// Калькулятор стоимости уборки
+  /// 
+  /// Правила расчёта:
+  /// - Минимальная цена: 20 000 тг (даже для площади ≤ 50 м²)
+  /// - Базовая площадь: 50 м² (включена в стартовую цену)
+  /// - Тариф "Старт": 400 тг/м² за площадь свыше 50 м²
+  /// - Остальные тарифы (кроме мебели): 350 тг/м² за площадь свыше 50 м²
+  /// - Тариф "Мебель": фиксированные цены (старая логика)
+  int _calculateTotalPrice(String tariffId, int area) {
+    // Для тарифа "Мебель" используем старую логику (фиксированные цены)
     if (tariffId == 'furniture') {
-      return 5000;
+      return 5000; // Минимальная цена для мебели
     }
     
-    // Получаем цену за м² из тарифа
-    int pricePerSqm = 400; // По умолчанию
+    // Минимальная (стартовая) цена всегда 20 000 тг
+    const int basePrice = 20000;
+    const int baseArea = 50; // Базовая площадь, включённая в стартовую цену
     
-    // Базовые цены для разных тарифов
-    switch (tariffId) {
-      case 'start':
-        pricePerSqm = 400;
-        break;
-      case 'comfort':
-      case 'premium':
-      case 'lux':
-        pricePerSqm = 350;
-        break;
-      case 'after-renovation':
-        pricePerSqm = 600;
-        break;
-      default:
-        pricePerSqm = 400;
+    // Если площадь ≤ 50 м², возвращаем минимальную цену
+    if (area <= baseArea) {
+      return basePrice;
     }
     
-    return pricePerSqm * area;
+    // Определяем цену за м² в зависимости от тарифа
+    int pricePerSqm;
+    if (tariffId == 'start') {
+      pricePerSqm = 400; // Тариф "Старт"
+    } else {
+      // Все остальные тарифы (comfort, premium, lux, after-renovation)
+      pricePerSqm = 350;
+    }
+    
+    // Рассчитываем итоговую цену: базовая цена + (площадь - базовая площадь) × цена за м²
+    final additionalArea = area - baseArea;
+    final totalPrice = basePrice + (additionalArea * pricePerSqm);
+    
+    return totalPrice;
   }
 
   @override
@@ -242,9 +279,14 @@ class _BookingPageState extends State<BookingPage> {
     final tariffId = uri.queryParameters['tariff'] ?? 
                      uri.queryParameters['tariffId'] ?? 
                      'default-tariff';
-    final area = uri.queryParameters['area'] ?? '';
+    
+    // Получаем площадь из поля ввода (или из URL, если поле пустое)
+    final areaText = _areaController.text.trim();
+    final areaFromInput = areaText.isNotEmpty ? int.tryParse(areaText) : null;
+    final areaFromUrl = uri.queryParameters['area'] ?? '';
+    final area = areaFromInput ?? (areaFromUrl.isNotEmpty ? int.tryParse(areaFromUrl) : null) ?? 50;
 
-    // Пересчитываем цену, если она не передана или равна 0
+    // Пересчитываем цену на основе площади и тарифа
     final baseTotal = _calculateTotalPrice(tariffId, area);
     
     int finalTotal = baseTotal;
@@ -283,11 +325,11 @@ class _BookingPageState extends State<BookingPage> {
                         label: 'Услуга',
                         value: tariffName,
                       ),
-                      if (area.isNotEmpty)
-                        _OrderDetailRow(
-                          label: 'Площадь',
-                          value: '$area м²',
-                        ),
+                      // Показываем площадь (обязательное поле)
+                      _OrderDetailRow(
+                        label: 'Площадь',
+                        value: '$area м²',
+                      ),
                       if (date.isNotEmpty)
                         FutureBuilder<String>(
                           future: DateFormatter.formatDateLong(DateTime.parse(date)),
@@ -362,6 +404,23 @@ class _BookingPageState extends State<BookingPage> {
                           keyboardType: TextInputType.phone,
                           maxLength: 20,
                           validator: Validators.validatePhone,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _areaController,
+                          decoration: const InputDecoration(
+                            labelText: 'Площадь',
+                            hintText: 'Введите площадь в м²',
+                            helperText: 'Обязательное поле',
+                            prefixIcon: Icon(Icons.square_foot),
+                          ),
+                          keyboardType: TextInputType.number,
+                          maxLength: 5,
+                          validator: Validators.validateArea,
+                          onChanged: (_) {
+                            // Автоматический пересчёт цены при изменении площади
+                            setState(() {});
+                          },
                         ),
                       ],
                     ),

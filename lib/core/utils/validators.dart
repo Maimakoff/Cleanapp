@@ -134,5 +134,28 @@ class Validators {
     final timeRegex = RegExp(r'^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$');
     return timeRegex.hasMatch(timeStr);
   }
+
+  // Validate area (must be positive number)
+  static String? validateArea(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Введите площадь';
+    }
+    
+    final area = int.tryParse(value.trim());
+    if (area == null) {
+      return 'Площадь должна быть числом';
+    }
+    
+    if (area <= 0) {
+      return 'Площадь должна быть больше 0';
+    }
+    
+    // Максимальная разумная площадь (например, 10000 м²)
+    if (area > 10000) {
+      return 'Площадь слишком большая';
+    }
+    
+    return null;
+  }
 }
 
